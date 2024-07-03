@@ -16,5 +16,10 @@
   "bugs": {
     "url": "https://github.com/filecoin-station/piece-indexer/issues"
   },
-  "homepage": "https://github.com/filecoin-station/piece-indexer#readme"
+  "homepage": "https://github.com/filecoin-station/piece-indexer#readme",
+  "dependencies": {
+    "@ipld/dag-cbor": "^9.2.1",
+    "@multiformats/multiaddr-to-uri": "^10.1.0",
+    "multiformats": "^13.1.3"
+  }
 }
