@@ -1,4 +1,5 @@
 import { CID } from 'multiformats/cid'
+import * as multihash from 'multiformats/hashes/digest'
 
 /*
 HUMAN READABLE CID
@@ -15,4 +16,10 @@ console.log('IPNI multihash (hex)', Buffer.from(MULTIHASH, 'base64').toString('h
 
 const cid = CID.parse(MY_CID)
 console.log('CID multihash (hex) ', Buffer.from(cid.multihash.bytes).toString('hex'))
-console.log('CID codec', cid.code.toString(16))
+console.log('CID codec', '0x' + cid.code.toString(16))
+
+const cid2 = CID.create(cid.version, 0x70 /* dag-pb */, cid.multihash)
+console.log('dag-pb CID', cid2)
+
+console.log('CID FROM MULTIHASH', CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(MULTIHASH, 'base64'))))
+console.log('ORIGINAL CID      ', cid)

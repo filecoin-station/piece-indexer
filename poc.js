@@ -1,5 +1,8 @@
-import assert from 'node:assert'
 import { multiaddrToUri } from '@multiformats/multiaddr-to-uri'
+import { CID } from 'multiformats/cid'
+import * as multihash from 'multiformats/hashes/digest'
+import assert from 'node:assert'
+import { parseMetadata } from './parse-metada.js'
 
 // IPNI specs: https://github.com/ipni/specs
 
@@ -67,9 +70,27 @@ const entries = await fetchCid(providerBaseUrl, head.Entries['/'])
 
 const entryHash = entries.Entries[0]['/'].bytes
 console.log('FIRST ENTRY:', entryHash)
-// const multihash = Buffer.from(entryHash, 'base64')
-// const payloadCid = CID.parse('m' + entryHash, base64.decoder)
-// console.log('PAYLOAD CID', payloadCid)
+const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64')))
+console.log('PAYLOAD CID', payloadCid)
+
+// const provRes = await fetch(`https://cid.contact/cid/${encodeURIComponent(payloadCid)}`)
+// const provBody = await provRes.json()
+// const allProviderResults = provBody.MultihashResults[0].ProviderResults
+// // console.log('filtering Provider.ID === %s && ContextID === %s', providerPeerId,head.ContextID['/'].bytes)
+// const provider =  allProviderResults.find(r => r.Provider.ID === providerPeerId && r.ContextID === head.ContextID['/'].bytes)
+// console.log('Retrieval provider', provider)
+// console.log('You can fetch the block via lassie')
+// console.log('  lassie fetch -o /dev/null -v --dag-scope block --providers %s/p2p/%s %s', provider.Provider.Addrs[0], providerPeerId, payloadCid)
+
+console.log('Metadata bytes', head.Metadata['/'].bytes)
+const meta = parseMetadata(head.Metadata['/'].bytes)
+console.log('Metadata', meta)
+
+if (meta.deal) {
+  console.log('\n=====')
+  console.log('PieceCID  ', meta.deal.PieceCID)
+  console.log('PayloadCID', payloadCid)
+}
 
 async function fetchCid (providerBaseUrl, adCid) {
   const url = new URL(adCid, new URL('/ipni/v1/ad/_', providerBaseUrl))
