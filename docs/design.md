@@ -75,7 +75,7 @@ we need the following ones:
   enough to take the first entry and ignore the rest.
 
 Advertisements are made available for consumption by indexer nodes as a set of
-files fetched via HTTP.
+files that can be fetched via HTTP.
 
 Quoting from
 [Advertisement Transfer](https://github.com/ipni/specs/blob/90648bca4749ef912b2d18f221514bc26b5bef0a/IPNI.md#advertisement-transfer):
