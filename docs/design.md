@@ -12,7 +12,7 @@ On the other hand, content is _retrieved_ from Filecoin using the CID of the
 requested payload.
 
 This dichotomy poses a challenge for retrieval checkers like Spark: for a given
-deal storing some PieceCID, what payload CID request when testing the retrieval?
+deal storing some PieceCID, what payload CID to request when testing the retrieval?
 
 Spark v1 relies on StorageMarket's DealProposal metadata `Label`, which is often
 (but not always!) set by the client to the root CID of the payload stored.
