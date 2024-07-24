@@ -8,7 +8,7 @@ Filecoin defines a `Piece` as the main unit of negotiation for data that users
 store on the Filecoin network. This is reflected in the on-chain metadata field
 `PieceCID`.
 
-On the other hand, content is retrieved from Filecoin using the CID of the
+On the other hand, content is _retrieved_ from Filecoin using the CID of the
 requested payload.
 
 This dichotomy poses a challenge for retrieval checkers like Spark: for a given
