@@ -121,8 +121,8 @@ Use the following per-provider state persisted in the database:
   from.
 
 - `last_head` - The CID of the head where we started the previous walk. All
-  advertisements from `last_head` to the end of the chain were already
-  processed.
+  advertisements from `last_head` to the end of the chain have already
+  been processed.
 
 - `next_head` - The CID of the most recent head seen by cid.contact. This is
   where we need to start the next walk from.
