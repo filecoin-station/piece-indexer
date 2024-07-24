@@ -5,7 +5,7 @@
 ### Context
 
 Filecoin defines a `Piece` as the main unit of negotiation for data that users
-store on the Filecoin network. This is reflected in the on-chain metadata field
+_store_ on the Filecoin network. This is reflected in the on-chain metadata field
 `PieceCID`.
 
 On the other hand, content is _retrieved_ from Filecoin using the CID of the
