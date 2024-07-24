@@ -46,7 +46,7 @@ after the SP advertise that they are no longer storing that block. This means
 our indexer can ignore `IsRm` advertisements.
 
 The indexer protocol does not provide any guarantees about the list of CIDs
-advertised for the same Payload CID. Different SPs can advertise different lists
+advertised for the same Piece CID. Different SPs can advertise different lists
 (e.g. the entries can be ordered differently) or can even cheat and submit CIDs
 that are not part of the Piece. Our indexer must scope the information to each
 index provider.
