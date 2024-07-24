@@ -71,7 +71,7 @@ we need the following ones:
 - **`Metadata`** represents additional opaque data. The metadata for Graphsync
   retrievals includes the PieceCID that we are looking for.
 
-- **`Entries`** provide a paginated list of multihashes. For our purposes, it's
+- **`Entries`** is a link to a data structure that contains the advertised multihashes. For our purposes, it's
   enough to take the first entry and ignore the rest.
 
 Advertisements are made available for consumption by indexer nodes as a set of
