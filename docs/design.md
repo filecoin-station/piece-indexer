@@ -99,7 +99,8 @@ https://cid.contact/providers
 
 The response provides all the metadata we need to download the advertisements:
 
-- `Publisher.Addrs` describes where we can contact SP's index provider
+- `Publisher.Addrs` describes where we can contact SP's index provider to
+  retrieve content for CIDs, e.g., advertisements.
 - `LastAdvertisement` contains the CID of the head advertisement
 
 ## Proposed Design
