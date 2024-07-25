@@ -120,9 +120,9 @@ Use the following per-provider state persisted in the database:
 - `provider_address` - Provider's address where we can fetch advertisements
   from.
 
-- `last_head` - The CID of the head where we started the previous walk. All
-  advertisements from `last_head` to the end of the chain have already
-  been processed.
+- `last_head` - The CID of the head where we started the previous walk (the last walk that has
+  already finished). All advertisements from `last_head` to the end of the chain have already been
+  processed.
 
 - `next_head` - The CID of the most recent head seen by cid.contact. This is
   where we need to start the next walk from.
@@ -133,58 +133,66 @@ Use the following per-provider state persisted in the database:
 - `tail` - The CID of the next advertisement in the chain that we need to
   process in the current walk.
 
-Every minute, fetch the latest providers from cid.contact. For each provider
-found, fetch the state from the database and run the following algorithm (using
-the name `new_head` for the CID of the latest advertisement).
+Every minute, run the following high-level loop:
+
+1. Fetch the list of providers and their latest advertisements (heads) from
+   https://cid.contact/providers.
+
+2. Fetch the state of all providers from our database.
+
+3. Update the state of each provider as described below, using the name `LastAdvertisement` for the
+   CID of the latest advertisement provided in the response from cid.contact.
+
+For each provider listed in the response:
 
 1. If `last_head` is not set, then we need to start the ingestion from scratch.
    Update the state as follows and start the chain walker:
 
    ```
-   last_head = new_head
-   next_head = new_head
-   head = new_head
-   tail = new_head
+   last_head := new_head
+   next_head := new_head
+   head := new_head
+   tail := new_head
    ```
 
-2. If `new_head` is the same as `next_head`, then there was no change since we
+2. If `LastAdvertisement` is the same as `next_head`, then there was no change since we
    checked the head last time and we are done.
 
-3. If `next_tail` is not null, then there is an ongoing walk of the chain we
+3. If `tail` is not null, then there is an ongoing walk of the chain we
    need to finish before we can ingest new advertisements. Update the state as
    follows and abort.
 
    ```
-   next_head := new_head
+   next_head := LastAdvertisement
    ```
 
-4. `next_tail` is null, which means we have finished ingesting all
+4. `tail` is null, which means we have finished ingesting all
    advertisements from `head` to the end of the chain. Update the state as
    follows and start the chain walker.
 
    ```
-   next_head = new_head
-   head = new_head
-   tail = new_head
+   next_head := new_head
+   head := new_head
+   tail := new_head
    ```
 
-The chain-walking algorithm loops over the following steps:
+The chain-walking algorithm runs in the background and loops over the following steps:
 
 1. If ` tail == last_head || tail == null`, then we finished the walk. Update
    the state as follows:
 
    ```
-   last_head = head
-   head = null
-   tail = null
+   last_head := head
+   head := null
+   tail := null
    ```
 
    If `next_head != last_head` then start a new walk by updating the state as
    follows:
 
    ```
-   head = next_head
-   tail = next_head
+   head := next_head
+   tail := next_head
    ```
 
 2. Otherwise take a step to the next item in the chain:
@@ -196,7 +204,7 @@ The chain-walking algorithm loops over the following steps:
       advertisement.
 
    ```
-   tail = PreviousID
+   tail := PreviousID
    ```
 
 #### Handling the Scale
