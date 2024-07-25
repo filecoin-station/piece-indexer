@@ -5,14 +5,15 @@
 ### Context
 
 Filecoin defines a `Piece` as the main unit of negotiation for data that users
-_store_ on the Filecoin network. This is reflected in the on-chain metadata field
-`PieceCID`.
+_store_ on the Filecoin network. This is reflected in the on-chain metadata
+field `PieceCID`.
 
 On the other hand, content is _retrieved_ from Filecoin using the CID of the
 requested payload.
 
 This dichotomy poses a challenge for retrieval checkers like Spark: for a given
-deal storing some PieceCID, what payload CID to request when testing the retrieval?
+deal storing some PieceCID, what payload CID to request when testing the
+retrieval?
 
 Spark v1 relies on StorageMarket's DealProposal metadata `Label`, which is often
 (but not always!) set by the client to the root CID of the payload stored.
@@ -71,8 +72,9 @@ we need the following ones:
 - **`Metadata`** represents additional opaque data. The metadata for Graphsync
   retrievals includes the PieceCID that we are looking for.
 
-- **`Entries`** is a link to a data structure that contains the advertised multihashes. For our purposes, it's
-  enough to take the first entry and ignore the rest.
+- **`Entries`** is a link to a data structure that contains the advertised
+  multihashes. For our purposes, it's enough to take the first entry and ignore
+  the rest.
 
 Advertisements are made available for consumption by indexer nodes as a set of
 files that can be fetched via HTTP.
@@ -120,9 +122,9 @@ Use the following per-provider state persisted in the database:
 - `provider_address` - Provider's address where we can fetch advertisements
   from.
 
-- `last_head` - The CID of the head where we started the previous walk (the last walk that has
-  already finished). All advertisements from `last_head` to the end of the chain have already been
-  processed.
+- `last_head` - The CID of the head where we started the previous walk (the last
+  walk that has already finished). All advertisements from `last_head` to the
+  end of the chain have already been processed.
 
 - `next_head` - The CID of the most recent head seen by cid.contact. This is
   where we need to start the next walk from.
@@ -140,8 +142,9 @@ Every minute, run the following high-level loop:
 
 2. Fetch the state of all providers from our database.
 
-3. Update the state of each provider as described below, using the name `LastAdvertisement` for the
-   CID of the latest advertisement provided in the response from cid.contact.
+3. Update the state of each provider as described below, using the name
+   `LastAdvertisement` for the CID of the latest advertisement provided in the
+   response from cid.contact.
 
 For each provider listed in the response:
 
@@ -155,20 +158,20 @@ For each provider listed in the response:
    tail := new_head
    ```
 
-2. If `LastAdvertisement` is the same as `next_head`, then there was no change since we
-   checked the head last time and we are done.
+2. If `LastAdvertisement` is the same as `next_head`, then there was no change
+   since we checked the head last time and we are done.
 
-3. If `tail` is not null, then there is an ongoing walk of the chain we
-   need to finish before we can ingest new advertisements. Update the state as
-   follows and abort.
+3. If `tail` is not null, then there is an ongoing walk of the chain we need to
+   finish before we can ingest new advertisements. Update the state as follows
+   and abort.
 
    ```
    next_head := LastAdvertisement
    ```
 
-4. `tail` is null, which means we have finished ingesting all
-   advertisements from `head` to the end of the chain. Update the state as
-   follows and start the chain walker.
+4. `tail` is null, which means we have finished ingesting all advertisements
+   from `head` to the end of the chain. Update the state as follows and start
+   the chain walker.
 
    ```
    next_head := new_head
@@ -176,7 +179,8 @@ For each provider listed in the response:
    tail := new_head
    ```
 
-The chain-walking algorithm runs in the background and loops over the following steps:
+The chain-walking algorithm runs in the background and loops over the following
+steps:
 
 1. If ` tail == last_head || tail == null`, then we finished the walk. Update
    the state as follows:
