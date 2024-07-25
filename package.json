@@ -5,6 +5,8 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "lint": "prettier --check .",
+    "lint:fix": "prettier --write .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -16,5 +18,8 @@
   "bugs": {
     "url": "https://github.com/filecoin-station/piece-indexer/issues"
   },
-  "homepage": "https://github.com/filecoin-station/piece-indexer#readme"
+  "homepage": "https://github.com/filecoin-station/piece-indexer#readme",
+  "devDependencies": {
+    "prettier": "^3.3.2"
+  }
 }
