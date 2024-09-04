@@ -3,8 +3,6 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dry-run": "node bin/dry-run.js",
-    "migrate": "node bin/migrate.js",
     "start": "node bin/piece-indexer.js",
     "lint": "standard",
     "test": "node --test"
@@ -13,6 +11,7 @@
     "standard": "^17.1.0"
   },
   "dependencies": {
+    "@multiformats/multiaddr-to-uri": "^10.1.0",
     "debug": "^4.3.6",
     "ioredis": "^5.4.1"
   }
