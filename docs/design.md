@@ -44,10 +44,10 @@ accepting `(ProviderID, PieceCID)` and returning a single `PayloadCID`.
 - **Indexer:** A network node that keeps a mappings of multihashes to provider
   records. Example: https://cid.contact
 
-- **Index Provider:** An entity that publishes advertisements and index data to
-  an indexer. It is usually, but not always, the same as the data provider.
-  Example: a [Boost](https://boost.filecoin.io) instance operated by a Storage
-  Provider.
+- **Index Provider (a.k.a Publisher):** An entity that publishes advertisements
+  and index data to an indexer. It is usually, but not always, the same as the
+  data provider. Example: a [Boost](https://boost.filecoin.io) instance operated
+  by a Storage Provider.
 
 Quoting from
 [IPNI spec](https://github.com/ipni/specs/blob/90648bca4749ef912b2d18f221514bc26b5bef0a/IPNI.md#terminology):
@@ -84,7 +84,7 @@ Quoting from
   to an indexer. It is usually, but not always, the same as the data provider. A
   publisher is identified by a libp2p peer ID.
 
-#### Notes
+### Notes
 
 **System Components**
 
@@ -97,8 +97,8 @@ There are two components in this design:
 - A piece indexer observing IPNI announcements to build an index mapping
   PieceCIDs to PayloadCIDs.
 
-When Spark build a list of tasks for the current round, it will ask the deal
-tracker for 1000 active deals. This ensures we test retrieval for active deals
+When Spark builds a list of tasks for the current round, it will ask the deal
+tracker for 1000 active deals. This ensures we test retrievals for active deals
 only.
 
 When Spark checker tests retrieval, it will first consult the piece indexer to
@@ -121,7 +121,7 @@ The indexer protocol does not provide any guarantees about the list of CIDs
 advertised for the same Piece CID. Different SPs can advertise different lists
 (e.g. the entries can be ordered differently) or can even cheat and submit CIDs
 that are not part of the Piece. Our indexer must scope the information to each
-index provider.
+index provider (each Filecoin SP).
 
 ### Anatomy of IPNI Advertisements
 
