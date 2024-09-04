@@ -39,12 +39,83 @@ from Filecoin SPs and extract the list of `(ProviderID, PieceCID, PayloadCID)`
 entries. Store these entries in a Postgres database. Provide a REST API endpoint
 accepting `(ProviderID, PieceCID)` and returning a single `PayloadCID`.
 
+### Terminology
+
+- **Indexer:** A network node that keeps a mappings of multihashes to provider
+  records. Example: https://cid.contact
+
+- **Index Provider:** An entity that publishes advertisements and index data to
+  an indexer. It is usually, but not always, the same as the data provider.
+  Example: a [Boost](https://boost.filecoin.io) instance operated by a Storage
+  Provider.
+
+Quoting from
+[IPNI spec](https://github.com/ipni/specs/blob/90648bca4749ef912b2d18f221514bc26b5bef0a/IPNI.md#terminology):
+
+- **Advertisement**: A record available from a publisher that contains, a link
+  to a chain of multihash blocks, the CID of the previous advertisement, and
+  provider-specific content metadata that is referenced by all the multihashes
+  in the linked multihash blocks. The provider data is identified by a key
+  called a context ID.
+
+- **Announce Message**: A message that informs indexers about the availability
+  of an advertisement. This is usually sent via gossip pubsub, but can also be
+  sent via HTTP. An announce message contains the advertisement CID it is
+  announcing, which allows indexers to ignore the announce if they have already
+  indexed the advertisement. The publisher's address is included in the announce
+  to tell indexers where to retrieve the advertisement from.
+
+- **Context ID**: A key that, for a provider, uniquely identifies content
+  metadata. This allows content metadata to be updated or delete on the indexer
+  without having to refer to it using the multihashes that map to it.
+
+- **Metadata**: Provider-specific data that a retrieval client gets from an
+  indexer query and passed to the provider when retrieving content. This
+  metadata is used by the provider to identify and find specific content and
+  deliver that content via the protocol (e.g. graphsync) specified in the
+  metadata.
+
+- **Provider**: Also called a Storage Provider, this is the entity from which
+  content can be retrieved by a retrieval client. When multihashes are looked up
+  on an indexer, the responses contain provider that provide the content
+  referenced by the multihashes. A provider is identified by a libp2p peer ID.
+
+- **Publisher**: This is an entity that publishes advertisements and index data
+  to an indexer. It is usually, but not always, the same as the data provider. A
+  publisher is identified by a libp2p peer ID.
+
 #### Notes
+
+**System Components**
+
+There are two components in this design:
+
+- A deal tracker component observing StorageMarket & DDO deals to build a list
+  of deals eligible for Spark retrieval testing. We define deal as a tuple
+  `(PieceCID, MinerID, ClientID)`.
+
+- A piece indexer observing IPNI announcements to build an index mapping
+  PieceCIDs to PayloadCIDs.
+
+When Spark build a list of tasks for the current round, it will ask the deal
+tracker for 1000 active deals. This ensures we test retrieval for active deals
+only.
+
+When Spark checker tests retrieval, it will first consult the piece indexer to
+convert deal's PieceCID to a payload CID to retrieve.
+
+**Expired Deals**
 
 Pieces are immutable. If we receive an advertisement saying that a payload block
 CID was found in a piece CID, then this information remains valid forever, even
 after the SP advertise that they are no longer storing that block. This means
 our indexer can ignore `IsRm` advertisements.
+
+It's ok if the piece indexer stores data for expired deals, because Spark is not
+going to ask for that data. (Of course, there is the cost of storing data we
+don't need, but we don't have to deal with that yet.)
+
+**Payload CIDs Are Scoped to Providers**
 
 The indexer protocol does not provide any guarantees about the list of CIDs
 advertised for the same Piece CID. Different SPs can advertise different lists
@@ -97,11 +168,12 @@ list of all index providers from which cid.contact have received announcements:
 
 https://cid.contact/providers
 
-The response provides all the metadata we need to download the advertisements:
+The response provides all the metadata we need to download the advertisements.
+For each index provider, the response includes:
 
 - `Publisher.Addrs` describes where we can contact SP's index provider to
   retrieve content for CIDs, e.g., advertisements.
-- `LastAdvertisement` contains the CID of the head advertisement
+- `LastAdvertisement` contains the CID of the head advertisement from the SP
 
 ## Proposed Design
 
@@ -115,6 +187,8 @@ therefore we need to account for the cases when the service restarts or a new
 head is published before we finish processing the chain.
 
 #### Proposed algorithm
+
+**Persisted state (per provider)**
 
 Use the following per-provider state persisted in the database:
 
@@ -130,22 +204,90 @@ Use the following per-provider state persisted in the database:
 - `next_head` - The CID of the most recent head seen by cid.contact. This is
   where we need to start the next walk from.
 
+  > **Note:** The initial walk will take a long time to complete. While we are
+  > walking the "old" chain, new advertisements (new heads) will be announced to
+  > IPNI.
+  >
+  > - `next_head` is the latest head announced to IPNI
+  > - `head` is the advertisement where the current walk-in-progress started
+  >
+  > I suppose we don't need to keep track of `next_head`. When the current walk
+  > finishes, we will wait up to one minute until we make another request to
+  > cid.contact to find what are the latest heads for each SPs.\_
+  >
+  > In the current proposal, when the current walk finishes, we can immediately
+  > continue with walking from the `next_head`.
+
 - `head` - The CID of the head advertisement we started the current walk from.
   We update this value whenever we start a new walk.
 
 - `tail` - The CID of the next advertisement in the chain that we need to
   process in the current walk.
 
+We must always walk the chain all the way to the genesis or to the entry we have
+already seen & processed.
+
+The current walk starts from `head` and walks up to `last_head`. When the
+current walk reaches `last_head`, we need to set `last_head ← head` so that the
+next walk knows where to stop.
+
+`next_head` is updated every minute when we query cid.contact for the latest
+heads. If the walk takes longer than a minute to finish, then `next_head` will
+change and we cannot use it for `last_head`.
+
+Here is how the state looks like in the middle of a walk:
+
+```
+next_head --> [ ] -\
+               ↓    |
+              ...   | entries announced after we started the current walk
+               ↓    |
+              [ ] -/
+               ↓
+     head --> [ ] -\
+               ↓    |
+              ...   | entries visited in this walk
+               ↓    |
+              [ ] -/
+               ↓
+     tail --> [ ] -\
+               ↓    |
+              ...   | entries NOT visited yet
+               ↓    |
+              [ ] -/
+               ↓
+last_head --> [ ] -\
+               ↓    |
+              ...   | entries visited in the previous walks
+               ↓    |
+              [ ] -/
+               ↓
+             (null)
+```
+
+**Track latest advertisements**
+
 Every minute, run the following high-level loop:
 
 1. Fetch the list of providers and their latest advertisements (heads) from
-   https://cid.contact/providers.
+   https://cid.contact/providers. (This is **one** HTTP request.)
 
-2. Fetch the state of all providers from our database.
+2. Fetch the state of all providers from our database. (This is **one** SQL
+   query.)
 
 3. Update the state of each provider as described below, using the name
    `LastAdvertisement` for the CID of the latest advertisement provided in the
-   response from cid.contact.
+   response from cid.contact. (This is a small bit of computation plus **one**
+   SQL query.)
+
+> **Note:** Instead of running the loop every minute, we can introduce a
+> one-minute delay between the iterations instead. It should not matter too much
+> in practice, though. I expect each iteration to finish within one minute:
+>
+> - The three steps outlined above require only three interactions over
+>   HTTP/SQL.
+> - The long chain walks are executed in the background and don't block this
+>   loop.
 
 For each provider listed in the response:
 
@@ -179,6 +321,8 @@ For each provider listed in the response:
    head := new_head
    tail := new_head
    ```
+
+**Walk advertisement chains (in background)**
 
 The chain-walking algorithm runs in the background and loops over the following
 steps:
