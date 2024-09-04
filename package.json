@@ -7,10 +7,11 @@
     "indexer"
   ],
   "scripts": {
-    "lint": "prettier --check . && standard && tsc -p .",
+    "lint": "prettier --check . && standard",
     "lint:fix": "prettier --write . && standard --fix .",
-    "pretest": "npm run lint",
-    "test": "npm test --workspaces --if-present"
+    "test:types": "tsc -p .",
+    "test:unit": "npm test --workspaces --if-present",
+    "test": "npm run lint && npm run test:types && npm run test:unit"
   },
   "repository": {
     "type": "git",
