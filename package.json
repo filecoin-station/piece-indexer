@@ -1,25 +1,28 @@
 {
-  "name": "@filecoin-station/piece-indexer",
+  "name": "@filecoin-station/piece-indexer-monorepo",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "index.js",
+  "workspaces": [
+    "indexer"
+  ],
   "scripts": {
-    "lint": "prettier --check .",
-    "lint:fix": "prettier --write .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "prettier --check . && standard",
+    "lint:fix": "prettier --write . && standard --fix .",
+    "pretest": "npm run lint",
+    "test": "npm test --workspaces --if-present"
   },
   "repository": {
     "type": "git",
     "url": "git+ssh://git@github.com/filecoin-station/piece-indexer.git"
   },
-  "author": "Miroslav Bajtoš <oss@bajtos.net>",
   "license": "(Apache-2.0 AND MIT)",
   "bugs": {
     "url": "https://github.com/filecoin-station/piece-indexer/issues"
   },
   "homepage": "https://github.com/filecoin-station/piece-indexer#readme",
   "devDependencies": {
-    "prettier": "^3.3.2"
+    "prettier": "^3.3.2",
+    "standard": "^17.1.0"
   }
 }
