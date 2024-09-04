@@ -7,7 +7,7 @@
     "indexer"
   ],
   "scripts": {
-    "lint": "prettier --check . && standard",
+    "lint": "prettier --check . && standard && tsc -p .",
     "lint:fix": "prettier --write . && standard --fix .",
     "pretest": "npm run lint",
     "test": "npm test --workspaces --if-present"
@@ -23,6 +23,7 @@
   "homepage": "https://github.com/filecoin-station/piece-indexer#readme",
   "devDependencies": {
     "prettier": "^3.3.2",
-    "standard": "^17.1.0"
+    "standard": "^17.1.0",
+    "typescript": "^5.5.4"
   }
 }
