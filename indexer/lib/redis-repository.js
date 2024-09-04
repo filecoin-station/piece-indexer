@@ -1,6 +1,5 @@
-/** @import { Repository, ProvidersWithState} from "./typings.js" */
+/** @import { ProviderToIpniStateMap } from "./typings.js" */
 
-/** @implements {Repository} */
 export class RedisRepository {
   #redis
 
@@ -12,29 +11,44 @@ export class RedisRepository {
   }
 
   /**
-   * @returns {Promise<ProvidersWithState>}
+   * @returns {Promise<ProviderToIpniStateMap>}
    */
-  async getProvidersWithState () {
+  async getIpniStateForAllProviders () {
     /** @type {string[]} */
-    const providerIds = []
+    const redisKeys = []
     const keyStream = this.#redis.scanStream({
-      match: 'provider-state:*',
+      match: 'ipni-state:*',
       count: 1000
     })
-    for await (const key of keyStream) {
-      const [, id] = key.split(':')
-      providerIds.push(id)
+    for await (const chunk of keyStream) {
+      redisKeys.push(...chunk)
     }
 
-    const rawStates = this.#redis.
-    // TODO
-    return new Map()
+    const stateList = await this.#redis.mget(redisKeys)
+
+    /** @type {ProviderToIpniStateMap} */
+    const result = new Map()
+    for (let ix = 0; ix < redisKeys.length; ix++) {
+      const key = redisKeys[ix]
+      const stateStr = stateList[ix]
+      if (!stateStr) {
+        console.error('Unexpected Redis state: the existing key %s does not have any value', key)
+        continue
+      }
+      const providerId = key.split(':')[1]
+      result.set(providerId, JSON.parse(stateStr))
+    }
+
+    return result
   }
 
   /**
-   * @param {ProvidersWithState} updates
+   * @param {ProviderToIpniStateMap} stateMap
    */
-  async updateProvidersWithState (updates) {
-    throw new Error('Method not implemented.')
+  async setIpniStateForAllProviders (stateMap) {
+    const serialized = new Map(
+      Array.from(stateMap.entries()).map(([key, value]) => ([`ipni-state:${key}`, JSON.stringify(value)]))
+    )
+    await this.#redis.mset(serialized)
   }
 }
