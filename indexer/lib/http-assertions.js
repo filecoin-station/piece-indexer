@@ -9,7 +9,8 @@ export async function assertOkResponse (res, errorMsg) {
   try {
     body = await res.text()
   } catch {}
-  const err = new Error(`${errorMsg ?? `Cannot fetch ${res.url}`} (${res.status}): ${body?.trimEnd()}`)
+  body = body?.trimEnd()
+  const err = new Error(`${errorMsg ?? `Cannot fetch ${res.url}`} (${res.status}): ${body}`)
   Object.assign(err, {
     statusCode: res.status,
     serverMessage: body

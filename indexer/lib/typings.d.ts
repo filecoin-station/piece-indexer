@@ -1,19 +1,21 @@
 /**
- * Data extracted from IPNI response
+ * Data synced from IPNi
  */
-export interface IpniProviderInfo {
-  providerId: string;
+export interface ProviderInfo {
   providerAddress: string;
   lastAdvertisementCID: string;
 }
 
-/**
- * Data stored in our database
- */
-export interface ProviderIpniState {
-  providerAddress: string;
-  lastAdvertisementCID: string;
+export type ProviderToInfoMap = Map<string, ProviderInfo>;
+
+export interface WalkerState {
+  lastHead: string;
+  head: string;
+  tail: string | undefined
+  status: string;
 }
 
-export type ProviderToIpniStateMap = Map<string, ProviderIpniState>;
+export type ProviderToWalkerStateMap = Map<string, WalkerState>
+
+export type PiecePayloadCIDs = string[];
 
