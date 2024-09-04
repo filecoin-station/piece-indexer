@@ -1,5 +1,5 @@
 /**
- * Data synced from IPNi
+ * Data synced from IPNI
  */
 export interface ProviderInfo {
   providerAddress: string;
