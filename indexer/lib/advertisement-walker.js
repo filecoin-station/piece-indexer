@@ -83,7 +83,15 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid)
   const previousAdvertisementCid = advertisement.PreviousID?.['/']
   debug('advertisement %s %j', advertisementCid, advertisement)
 
-  const entriesCid = advertisement.Entries['/']
+  const entriesCid = advertisement.Entries?.['/']
+  if (!entriesCid || entriesCid === 'bafkreehdwdcefgh4dqkjv67uzcmw7oje') {
+    // An empty advertisement with no entries
+    // See https://github.com/ipni/ipni-cli/blob/512ef8294eb717027b72e572897fbd8a1ed74564/pkg/adpub/client_store.go#L46-L48
+    // https://github.com/ipni/go-libipni/blob/489479457101ffe3cbe80682570b63c12ba2546d/ingest/schema/schema.go#L65-L71
+    debug('advertisement %s has no entries: %j', advertisementCid, advertisement.Entries)
+    return { previousAdvertisementCid }
+  }
+
   const entriesChunk =
     /** @type {{
      Entries: { '/' :  { bytes: string } }[]
