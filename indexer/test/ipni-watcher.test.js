@@ -15,11 +15,10 @@ describe('getProvidersWithMetadata', () => {
     const providers = await getProvidersWithMetadata()
     debug(JSON.stringify(providers, null, 2))
 
-    const frisbiiOnFly = providers.find(
-      p => p.providerId === FRISBII_ID && p.providerAddress === FRISBII_ADDRESS
-    )
+    const frisbiiOnFly = providers.get(FRISBII_ID)
 
     assert(frisbiiOnFly)
+    assert.strictEqual(frisbiiOnFly.providerAddress, FRISBII_ADDRESS)
     assert.match(frisbiiOnFly.lastAdvertisementCID, /^bagu/)
   })
 })

@@ -70,7 +70,7 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid)
       Entries: { '/': string },
       IsRm: false,
       Metadata: { '/': { bytes: string } },
-      PreviousID?: { '/': string ,
+      PreviousID?: { '/': string },
       Provider: string
       Signature: {
         '/': {

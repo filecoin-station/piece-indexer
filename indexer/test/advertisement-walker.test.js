@@ -11,30 +11,34 @@ import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
 const debug = createDebug('test')
 
 // TODO(bajtos) We may need to replace this with a mock index provider
-const providerId = '12D3KooWDYiKtcxTrjNFtR6UqKRkJpESYHmmFznQAAkDX2ZHQ49t'
-const providerAddress = 'http://222.214.219.200:3104'
-const knownAdvertisementCID = 'baguqeeradb34kxwvi5fs3gj6wrxfkcqntzklq4qdallcejqfhyryftnpd25a'
-const knownPrevAdvertisementCID = 'baguqeerawqvze5suesscwzsmpgemthwv6hx2yi2rg35zt7jdlmxapjf5qfdq'
+const providerId = '12D3KooWHKeaNCnYByQUMS2n5PAZ1KZ9xKXqsb4bhpxVJ6bBJg5V'
+const providerAddress = 'http://f010479.twinquasar.io:3104'
+const knownAdvertisement = {
+  adCid: 'baguqeerarbmakqcnzzuhki25xs357xyin4ieqxvumrp5cy7s44v7tzwwmg3q',
+  previousAdCid: 'baguqeerau2rz67nvzcaotgowm2olalanx3eynr2asbjwdkaq3y5umqvdi2ea',
+  payloadCid: 'bafkreigrnnl64xuevvkhknbhrcqzbdvvmqnchp7ae2a4ulninsjoc5svoq',
+  pieceCid: 'baga6ea4seaqlwzed5tgjtyhrugjziutzthx2wrympvsuqhfngwdwqzvosuchmja'
+}
 
 describe('processNextAdvertisement', () => {
   it('handles a new index provider not seen before', async () => {
     /** @type {ProviderInfo} */
     const providerInfo = {
       providerAddress,
-      lastAdvertisementCID: knownAdvertisementCID
+      lastAdvertisementCID: knownAdvertisement.adCid
     }
     const walkerState = undefined
     const { indexEntry, newState } = await processNextAdvertisement(providerId, providerInfo, walkerState)
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: providerInfo.lastAdvertisementCID,
       lastHead: providerInfo.lastAdvertisementCID,
-      tail: knownPrevAdvertisementCID,
-      status: `Walking the advertisements from ${knownAdvertisementCID}, next step: ${knownPrevAdvertisementCID}`
+      tail: knownAdvertisement.previousAdCid,
+      status: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`
     }))
 
     assert.deepStrictEqual(indexEntry, {
-      payloadCid: 'bafk2bzaceaybhh2uenrbiuv4x6xywbv6oxizamydggd5r2xgnnvr53uwnjqea',
-      pieceCid: 'baga6ea4seaqjk25ts2kekzqa5jplj6uyzk7qpiigg4koiqjz26dtmzooiocwuoa'
+      payloadCid: knownAdvertisement.payloadCid,
+      pieceCid: knownAdvertisement.pieceCid
     })
   })
 
@@ -42,7 +46,7 @@ describe('processNextAdvertisement', () => {
     /** @type {ProviderInfo} */
     const providerInfo = {
       providerAddress,
-      lastAdvertisementCID: knownAdvertisementCID
+      lastAdvertisementCID: knownAdvertisement.adCid
     }
 
     let result = await processNextAdvertisement(providerId, providerInfo, undefined)
@@ -57,11 +61,11 @@ describe('processNextAdvertisement', () => {
 
 describe('fetchAdvertisedPayload', () => {
   it('returns previousAdvertisementCid, pieceCid and payloadCid for Graphsync retrievals', async () => {
-    const result = await fetchAdvertisedPayload(providerAddress, knownAdvertisementCID)
+    const result = await fetchAdvertisedPayload(providerAddress, knownAdvertisement.adCid)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      payloadCid: 'bafk2bzaceaybhh2uenrbiuv4x6xywbv6oxizamydggd5r2xgnnvr53uwnjqea',
-      pieceCid: 'baga6ea4seaqjk25ts2kekzqa5jplj6uyzk7qpiigg4koiqjz26dtmzooiocwuoa',
-      previousAdvertisementCid: 'baguqeerawqvze5suesscwzsmpgemthwv6hx2yi2rg35zt7jdlmxapjf5qfdq'
+      payloadCid: knownAdvertisement.payloadCid,
+      pieceCid: knownAdvertisement.pieceCid,
+      previousAdvertisementCid: knownAdvertisement.previousAdCid
     }))
   })
 
