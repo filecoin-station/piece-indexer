@@ -28,37 +28,30 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
   } else if (nextHead === currentWalkerState?.lastHead) {
     debug('No new advertisements from provider %s (%s)', providerId, providerInfo.providerAddress)
     return {}
-  } else if (!currentWalkerState?.lastHead) {
-    debug('Initial walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
-
-    /** @type {WalkerState} */
-    state = {
-      head: nextHead,
-      tail: nextHead,
-      lastHead: undefined,
-      status: 'placeholder'
-    }
   } else {
     debug('New walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
     state = {
       head: nextHead,
       tail: nextHead,
-      lastHead: currentWalkerState.lastHead,
+      lastHead: currentWalkerState?.lastHead,
       status: 'placeholder'
     }
   }
 
-  assert(state?.tail)
+  // TypeScript is not able to infer (yet?) that state.tail is always set by the code above
+  assert(state.tail)
 
   // TODO: handle networking errors, Error: connect ENETUNREACH 154.42.3.42:3104
   const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(providerInfo.providerAddress, state.tail)
 
   if (!previousAdvertisementCid || previousAdvertisementCid === state.lastHead) {
+    // We finished the walk
     state.lastHead = state.head
     state.head = undefined
     state.tail = undefined
     state.status = `All advertisements from ${state.lastHead} to the end of the chain were processed.`
   } else {
+    // There are more steps in this walk
     state.tail = previousAdvertisementCid
     state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
   }
