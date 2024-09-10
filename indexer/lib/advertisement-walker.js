@@ -1,12 +1,13 @@
+import * as cbor from '@ipld/dag-cbor'
 import createDebug from 'debug'
-import { assertOkResponse } from './http-assertions.js'
+import { varint } from 'multiformats'
 import { CID } from 'multiformats/cid'
 import * as multihash from 'multiformats/hashes/digest'
-import { varint } from 'multiformats'
-import * as cbor from '@ipld/dag-cbor'
+import assert from 'node:assert'
+import { assertOkResponse } from './http-assertions.js'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
-/** @import { RedisRepository as Repository } from './redis-repository.js' */
+// /** @import { RedisRepository as Repository } from './redis-repository.js' */
 
 const debug = createDebug('spark-piece-indexer:observer')
 
@@ -21,35 +22,46 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
   /** @type {WalkerState} */
   let state
 
-  if (!currentWalkerState?.lastHead) {
-    console.log('Initial walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
+  if (currentWalkerState?.tail) {
+    debug('Next step for provider %s (%s): %s', providerId, providerInfo.providerAddress, currentWalkerState.tail)
+    state = { ...currentWalkerState }
+  } else if (nextHead === currentWalkerState?.lastHead) {
+    debug('No new advertisements from provider %s (%s)', providerId, providerInfo.providerAddress)
+    return {}
+  } else if (!currentWalkerState?.lastHead) {
+    debug('Initial walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
 
     /** @type {WalkerState} */
     state = {
-      lastHead: nextHead,
       head: nextHead,
       tail: nextHead,
+      lastHead: undefined,
       status: 'placeholder'
     }
   } else {
-    console.log('WALK NOT IMPLEMENTED YET %s %o', providerId, currentWalkerState)
-    return {}
+    debug('New walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
+    state = {
+      head: nextHead,
+      tail: nextHead,
+      lastHead: currentWalkerState.lastHead,
+      status: 'placeholder'
+    }
   }
 
-  // if (state.tail === state.lastHead || state.tail === undefined) {
-  //   console.log('WALK FINISHED: %s %o', state)
-  //   return { }
-  // }
-  if (!state || !state.tail) {
-    console.log('NOTHING TO DO for %s %o', providerId, currentWalkerState)
-    return {}
-  }
+  assert(state?.tail)
 
   // TODO: handle networking errors, Error: connect ENETUNREACH 154.42.3.42:3104
-
   const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(providerInfo.providerAddress, state.tail)
-  state.tail = previousAdvertisementCid
-  state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
+
+  if (!previousAdvertisementCid || previousAdvertisementCid === state.lastHead) {
+    state.lastHead = state.head
+    state.head = undefined
+    state.tail = undefined
+    state.status = `All advertisements from ${state.lastHead} to the end of the chain were processed.`
+  } else {
+    state.tail = previousAdvertisementCid
+    state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
+  }
 
   const indexEntry = entry.pieceCid ? entry : undefined
   return {
