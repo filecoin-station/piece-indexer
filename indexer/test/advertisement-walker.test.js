@@ -32,6 +32,22 @@ const knownAdvertisement = {
 }
 
 describe('processNextAdvertisement', () => {
+  it('ignores non-HTTP(s) addresses and explains the problem in the status', async () => {
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: '/ip4/127.0.0.1/tcp/80',
+      lastAdvertisementCID: 'baguqeeraTEST'
+    }
+
+    const result = await processNextAdvertisement(providerId, providerInfo, undefined)
+
+    assert.deepStrictEqual(result, {
+      newState: {
+        status: 'Index provider advertises over an unsupported protocol: /ip4/127.0.0.1/tcp/80'
+      }
+    })
+  })
+
   it('handles a new index provider not seen before', async () => {
     /** @type {ProviderInfo} */
     const providerInfo = {

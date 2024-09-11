@@ -4,12 +4,50 @@ import { varint } from 'multiformats'
 import { CID } from 'multiformats/cid'
 import * as multihash from 'multiformats/hashes/digest'
 import assert from 'node:assert'
+import timers from 'node:timers/promises'
 import { assertOkResponse } from './http-assertions.js'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
 /** @import { RedisRepository as Repository } from './redis-repository.js' */
 
 const debug = createDebug('spark-piece-indexer:observer')
+
+/**
+ * @param {object} args
+ * @param {Repository} args.repository
+ * @param {number} args.minStepIntervalInMs
+ * @param {AbortSignal} [args.signal]
+ */
+export async function runWalkers ({ repository, minStepIntervalInMs, signal }) {
+  while (!signal?.aborted) {
+    const started = Date.now()
+
+    console.log('Walking one step')
+    const ipniInfoMap = await repository.getIpniInfoForAllProviders()
+
+    // FIXME: run this concurrently
+    await Promise.allSettled([...ipniInfoMap.entries()].map(
+      async ([providerId, info]) => {
+        if (['12D3KooWKF2Qb8s4gFXsVB1jb98HpcwhWf12b1TA51VqrtY3PmMC'].includes(providerId)) {
+          console.log('Skipping unreachable provider %s', providerId)
+          return
+        }
+
+        try {
+          await walkOneStep(repository, providerId, info)
+          console.log('Ingested another advertisement from %s (%s)', providerId, info.providerAddress)
+        } catch (err) {
+          console.error('Error indexing provider %s (%s):', providerId, info.providerAddress, err)
+        }
+      }))
+
+    const delay = minStepIntervalInMs - (Date.now() - started)
+    if (delay > 0) {
+      console.log('Waiting for %sms before the next walk', delay)
+      await timers.setTimeout(delay)
+    }
+  }
+}
 
 /**
  * @param {Repository} repository
@@ -33,10 +71,14 @@ export async function walkOneStep (repository, providerId, providerInfo) {
  * @param {WalkerState | undefined} currentWalkerState
  */
 export async function processNextAdvertisement (providerId, providerInfo, currentWalkerState) {
-  // TODO - add tests for this condition
   if (!providerInfo.providerAddress?.match(/^https?:\/\//)) {
-    console.log('Skipping provider %s address %s', providerId, info.providerAddress)
-    return
+    debug('Skipping provider %s - address is not HTTP(s): %s', providerId, providerInfo.providerAddress)
+    return {
+      /** @type {WalkerState} */
+      newState: {
+        status: `Index provider advertises over an unsupported protocol: ${providerInfo.providerAddress}`
+      }
+    }
   }
 
   const nextHead = providerInfo.lastAdvertisementCID
@@ -84,6 +126,11 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
     indexEntry
   }
 }
+
+/** @typedef {{
+    pieceCid: string | undefined;
+    payloadCid: string;
+}} AdvertisedPayload */
 
 /**
  * @param {string} providerAddress

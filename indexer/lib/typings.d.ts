@@ -36,9 +36,9 @@ last_head --> [ ] -\
              (null)
  */
 export interface WalkerState {
-  head: string | undefined;
-  tail: string | undefined
-  lastHead: string | undefined;
+  head?: string;
+  tail?: string;
+  lastHead?: string;
   status: string;
 }
 
