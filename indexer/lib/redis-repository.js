@@ -1,4 +1,4 @@
-/** @import { ProviderInfo, ProviderToInfoMap, ProviderToWalkerStateMap, WalkerState } from "./typings.js" */
+/** @import { ProviderInfo, ProviderToInfoMap, ProviderToWalkerStateMap, WalkerState } from './typings.js' */
 
 export class RedisRepository {
   #redis
@@ -45,13 +45,40 @@ export class RedisRepository {
   }
 
   /**
-   *
+   * @param {string} providerId
+   * @returns {Promise<WalkerState>}
+   */
+  async getWalkerState (providerId) {
+    const json = await this.#redis.get(`walker-state:${providerId}`)
+    return json ? JSON.parse(json) : undefined
+  }
+
+  /**
    * @param {string} providerId
    * @param {WalkerState} state
    */
   async setWalkerState (providerId, state) {
     const data = JSON.stringify(state)
     await this.#redis.set(`walker-state:${providerId}`, data)
+  }
+
+  /**
+   * @param {string} providerId
+   * @param {string} pieceCid
+   * @param {string[]} payloadCids
+   */
+  async addPiecePayloadBlocks (providerId, pieceCid, ...payloadCids) {
+    await this.#redis.sadd(`piece-payload:${providerId}:${pieceCid}`, ...payloadCids)
+  }
+
+  /**
+   * @param {string} providerId
+   * @param {string} pieceCid
+   * @returns {Promise<string[]>}
+   */
+  async getPiecePayloadBlocks (providerId, pieceCid) {
+    const payloadCids = await this.#redis.smembers(`piece-payload:${providerId}:${pieceCid}`)
+    return payloadCids
   }
 
   /**

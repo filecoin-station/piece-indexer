@@ -2,7 +2,7 @@ import { Redis } from 'ioredis'
 import { RedisRepository } from '../lib/redis-repository.js'
 import { syncProvidersFromIPNI } from '../lib/ipni-watcher.js'
 import timers from 'node:timers/promises'
-import { processNextAdvertisement } from '../lib/advertisement-walker.js'
+import { processNextAdvertisement, walkOneStep } from '../lib/advertisement-walker.js'
 
 const {
   REDIS_URL: redisUrl = 'redis://localhost:6379'
@@ -57,35 +57,24 @@ async function runWalkers () {
     const started = Date.now()
 
     // EVERYTHING BELOW IS TEMPORARY AND WILL BE SIGNIFICANTLY REWORKED
-    try {
-      console.log('Walking one step')
-      const ipniInfoMap = await repository.getIpniInfoForAllProviders()
-      const walkerStateMap = await repository.getWalkerStateForAllProviders()
+    console.log('Walking one step')
+    const ipniInfoMap = await repository.getIpniInfoForAllProviders()
 
-      // FIXME: run this concurrently
-      for (const [providerId, info] of ipniInfoMap.entries()) {
-        const state = walkerStateMap.get(providerId)
-
-        if (!info.providerAddress?.match(/^https?:\/\//)) {
-          console.log('Skipping provider %s address %s', providerId, info.providerAddress)
-          continue
-        }
+    // FIXME: run this concurrently
+    await Promise.allSettled([...ipniInfoMap.entries()].map(
+      async ([providerId, info]) => {
         if (['12D3KooWKF2Qb8s4gFXsVB1jb98HpcwhWf12b1TA51VqrtY3PmMC'].includes(providerId)) {
           console.log('Skipping unreachable provider %s', providerId)
-          continue
+          return
         }
 
         try {
-          const result = await processNextAdvertisement(providerId, info, state)
-          console.log('%s %o\n -> %o', providerId, result.newState, result.indexEntry)
+          await walkOneStep(repository, providerId, info)
+          console.log('Ingested another advertisement from %s (%s)', providerId, info.providerAddress)
         } catch (err) {
-          console.error('Cannot process the next advertisement.', err)
-          // TODO: log to Sentry
+          console.error('Error indexing provider %s (%s):', providerId, info.providerAddress, err)
         }
-      }
-    } catch (err) {
-      console.error('Walking step failed.', err)
-    }
+      }))
 
     const delay = 100 - (Date.now() - started)
     if (delay > 0) {

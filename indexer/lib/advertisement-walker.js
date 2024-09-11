@@ -7,9 +7,25 @@ import assert from 'node:assert'
 import { assertOkResponse } from './http-assertions.js'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
-// /** @import { RedisRepository as Repository } from './redis-repository.js' */
+/** @import { RedisRepository as Repository } from './redis-repository.js' */
 
 const debug = createDebug('spark-piece-indexer:observer')
+
+/**
+ * @param {Repository} repository
+ * @param {string} providerId
+ * @param {ProviderInfo} providerInfo
+ */
+export async function walkOneStep (repository, providerId, providerInfo) {
+  const walkerState = await repository.getWalkerState(providerId)
+  const { newState, indexEntry } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+  if (newState) {
+    await repository.setWalkerState(providerId, newState)
+  }
+  if (indexEntry?.pieceCid) {
+    await repository.addPiecePayloadBlocks(providerId, indexEntry.pieceCid, indexEntry.payloadCid)
+  }
+}
 
 /**
  * @param {string} providerId
@@ -17,6 +33,12 @@ const debug = createDebug('spark-piece-indexer:observer')
  * @param {WalkerState | undefined} currentWalkerState
  */
 export async function processNextAdvertisement (providerId, providerInfo, currentWalkerState) {
+  // TODO - add tests for this condition
+  if (!providerInfo.providerAddress?.match(/^https?:\/\//)) {
+    console.log('Skipping provider %s address %s', providerId, info.providerAddress)
+    return
+  }
+
   const nextHead = providerInfo.lastAdvertisementCID
 
   /** @type {WalkerState} */

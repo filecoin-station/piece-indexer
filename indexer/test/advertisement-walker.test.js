@@ -1,6 +1,12 @@
+import { Redis } from 'ioredis'
 import assert from 'node:assert'
-import { describe, it } from 'node:test'
-import { fetchAdvertisedPayload, processNextAdvertisement } from '../lib/advertisement-walker.js'
+import { after, before, beforeEach, describe, it } from 'node:test'
+import {
+  fetchAdvertisedPayload,
+  processNextAdvertisement,
+  walkOneStep
+} from '../lib/advertisement-walker.js'
+import { RedisRepository } from '../lib/redis-repository.js'
 import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
 
 /** @import { ProviderInfo, WalkerState } from '../lib/typings.js' */
@@ -209,5 +215,49 @@ describe('fetchAdvertisedPayload', () => {
       // That's unrelated to HTTP vs Graphsync retrievals
       previousAdvertisementCid: undefined
     }))
+  })
+})
+
+describe.only('walkOneStep', () => {
+  const providerId = '12D3KooTEST'
+
+  /** @type {Redis} */
+  let redis
+
+  before(async () => {
+    redis = new Redis({ db: 1 })
+  })
+
+  beforeEach(async () => {
+    await redis.flushall()
+  })
+
+  after(async () => {
+    await redis?.disconnect()
+  })
+
+  it.only('handles a new index provider not seen before', async () => {
+    const repository = new RedisRepository(redis)
+
+    const nextHead = knownAdvertisement.adCid
+
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress,
+      lastAdvertisementCID: nextHead
+    }
+
+    await walkOneStep(repository, providerId, providerInfo)
+
+    const newState = await repository.getWalkerState(providerId)
+    assert.deepStrictEqual(newState, /** @type {WalkerState} */({
+      head: nextHead,
+      tail: knownAdvertisement.previousAdCid,
+      // lastHead: undefined,
+      status: `Walking the advertisements from ${nextHead}, next step: ${knownAdvertisement.previousAdCid}`
+    }))
+
+    const pieceBlocks = await repository.getPiecePayloadBlocks(providerId, knownAdvertisement.pieceCid)
+    assert.deepStrictEqual(pieceBlocks, [knownAdvertisement.payloadCid])
   })
 })
