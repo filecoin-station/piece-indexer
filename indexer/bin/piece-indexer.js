@@ -1,7 +1,7 @@
 import { Redis } from 'ioredis'
 import { RedisRepository } from '../lib/redis-repository.js'
 import { runIpniSync } from '../lib/ipni-watcher.js'
-import { runWalkers } from '../lib/advertisement-walker.js'
+import { runWalkers, walkProviderChain } from '../lib/advertisement-walker.js'
 
 const {
   REDIS_URL: redisUrl = 'redis://localhost:6379'
@@ -22,7 +22,22 @@ const redis = new Redis({
 await redis.connect()
 const repository = new RedisRepository(redis)
 
-await Promise.all([
-  runIpniSync({ repository, minSyncIntervalInMs: 60_000 }),
-  runWalkers({ repository, minStepIntervalInMs: 100 })
-])
+/** @type {Map<string, boolean>} */
+const providerWalkers = new Map()
+
+for await (const providerIds of runIpniSync({ repository, minSyncIntervalInMs: 60_000 })) {
+  for (const id of providerIds) {
+    if (providerWalkers.get(id)) continue
+
+    providerWalkers.set(id, true)
+    walkProviderChain({
+      repository,
+      providerId,
+      // TODO: replace this with an in-memory structure
+      getProviderInfo: async (id) => repository.getIpniInfo(id),
+      minStepIntervalInMs: 100
+    }).finally(
+      () => providerWalkers.set(id, false)
+    )
+  }
+}

@@ -14,7 +14,7 @@ const debug = createDebug('spark-piece-indexer:observer')
  * @param {number} args.minSyncIntervalInMs
  * @param {AbortSignal} [args.signal]
  */
-export async function runIpniSync ({ repository, minSyncIntervalInMs, signal }) {
+export async function * runIpniSync ({ repository, minSyncIntervalInMs, signal }) {
   while (!signal?.aborted) {
     const started = Date.now()
     try {
@@ -25,9 +25,10 @@ export async function runIpniSync ({ repository, minSyncIntervalInMs, signal }) 
         providers.size,
         Array.from(providers.values()).filter(p => p.providerAddress.match(/^https?:\/\//)).length
       )
+      yield [...providers.keys()]
     } catch (err) {
       console.error('Cannot sync from IPNI.', err)
-      // TODO: log to Sentry
+      // FIXME: log to Sentry
     }
     const delay = minSyncIntervalInMs - (Date.now() - started)
     if (delay > 0) {

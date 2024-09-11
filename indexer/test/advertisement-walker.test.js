@@ -234,7 +234,7 @@ describe('fetchAdvertisedPayload', () => {
   })
 })
 
-describe.only('walkOneStep', () => {
+describe('walkOneStep', () => {
   const providerId = '12D3KooTEST'
 
   /** @type {Redis} */
@@ -252,7 +252,7 @@ describe.only('walkOneStep', () => {
     await redis?.disconnect()
   })
 
-  it.only('handles a new index provider not seen before', async () => {
+  it('handles a new index provider not seen before', async () => {
     const repository = new RedisRepository(redis)
 
     const nextHead = knownAdvertisement.adCid

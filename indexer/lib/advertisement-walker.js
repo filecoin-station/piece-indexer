@@ -49,6 +49,30 @@ export async function runWalkers ({ repository, minStepIntervalInMs, signal }) {
   }
 }
 
+export async function walkProviderChain ({
+  repository,
+  providerId,
+  getProviderInfo,
+  minStepIntervalInMs,
+  signal
+}) {
+  while (!signal?.aborted) {
+    const started = Date.now()
+    const providerInfo = await getProviderInfo(providerId)
+    try {
+      await walkOneStep(repository, providerId, providerInfo)
+    } catch (err) {
+      console.error('Error indexing provider %s (%s):', providerId, providerInfo.providerAddress, err)
+      // FIXME: capture this error to Sentry
+    }
+    const delay = minStepIntervalInMs - (Date.now() - started)
+    if (delay > 0) {
+      debug('Waiting for %sms before the next walk for provider %s (%s)', delay, providerId, providerInfo.providerAddress)
+      await timers.setTimeout(delay)
+    }
+  }
+}
+
 /**
  * @param {Repository} repository
  * @param {string} providerId
