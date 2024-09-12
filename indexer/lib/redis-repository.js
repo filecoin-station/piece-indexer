@@ -1,4 +1,4 @@
-/** @import { ProviderInfo, ProviderToInfoMap, ProviderToWalkerStateMap, WalkerState } from './typings.js' */
+/** @import { WalkerState } from './typings.js' */
 
 export class RedisRepository {
   #redis
@@ -8,40 +8,6 @@ export class RedisRepository {
    */
   constructor (redis) {
     this.#redis = redis
-  }
-
-  /**
-   * @returns {Promise<ProviderToInfoMap>}
-   */
-  async getIpniInfoForAllProviders () {
-    const stringEntries = await this.#scanEntries('ipni-state')
-    /** @type {[string, ProviderInfo][]} */
-    const entries = stringEntries.map(
-      ([providerId, stateJson]) => (([providerId, JSON.parse(stateJson)]))
-    )
-    return new Map(entries)
-  }
-
-  /**
-   * @param {ProviderToInfoMap} keyValueMap
-   */
-  async setIpniInfoForAllProviders (keyValueMap) {
-    const serialized = new Map(
-      Array.from(keyValueMap.entries()).map(([key, value]) => ([`ipni-state:${key}`, JSON.stringify(value)]))
-    )
-    await this.#redis.mset(serialized)
-  }
-
-  /**
-   * @returns {Promise<ProviderToWalkerStateMap>}
-   */
-  async getWalkerStateForAllProviders () {
-    const stringEntries = await this.#scanEntries('walker-state')
-    /** @type {[string, WalkerState][]} */
-    const entries = stringEntries.map(
-      ([providerId, stateJson]) => (([providerId, JSON.parse(stateJson)]))
-    )
-    return new Map(entries)
   }
 
   /**

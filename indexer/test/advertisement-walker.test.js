@@ -42,6 +42,7 @@ describe('processNextAdvertisement', () => {
     const result = await processNextAdvertisement(providerId, providerInfo, undefined)
 
     assert.deepStrictEqual(result, {
+      finished: true,
       newState: {
         status: 'Index provider advertises over an unsupported protocol: /ip4/127.0.0.1/tcp/80'
       }
@@ -55,17 +56,20 @@ describe('processNextAdvertisement', () => {
       lastAdvertisementCID: knownAdvertisement.adCid
     }
     const walkerState = undefined
-    const { indexEntry, newState } = await processNextAdvertisement(providerId, providerInfo, walkerState)
-    assert.deepStrictEqual(newState, /** @type {WalkerState} */({
-      head: providerInfo.lastAdvertisementCID,
-      tail: knownAdvertisement.previousAdCid,
-      lastHead: undefined,
-      status: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`
-    }))
-
-    assert.deepStrictEqual(indexEntry, {
-      payloadCid: knownAdvertisement.payloadCid,
-      pieceCid: knownAdvertisement.pieceCid
+    const result = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    assert.deepStrictEqual(result, {
+      /** @type {WalkerState} */
+      newState: {
+        head: providerInfo.lastAdvertisementCID,
+        tail: knownAdvertisement.previousAdCid,
+        lastHead: undefined,
+        status: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`
+      },
+      indexEntry: {
+        payloadCid: knownAdvertisement.payloadCid,
+        pieceCid: knownAdvertisement.pieceCid
+      },
+      finished: false
     })
   })
 
@@ -85,7 +89,9 @@ describe('processNextAdvertisement', () => {
     }
 
     const result = await processNextAdvertisement(providerId, providerInfo, walkerState)
-    assert.deepStrictEqual(result, {})
+    assert.deepStrictEqual(result, {
+      finished: true
+    })
   })
 
   it('moves the tail by one step', async () => {
@@ -103,7 +109,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, indexEntry } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, indexEntry, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: walkerState.head, // this does not change during the walk
@@ -113,6 +119,8 @@ describe('processNextAdvertisement', () => {
     }))
 
     assert(indexEntry, 'the step found an index entry')
+
+    assert.strictEqual(finished, false, 'finished')
   })
 
   it('starts a new walk for a known provider', async () => {
@@ -129,7 +137,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: knownAdvertisement.adCid,
@@ -137,6 +145,8 @@ describe('processNextAdvertisement', () => {
       lastHead: walkerState.lastHead, // this does not change during the walk
       status: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`
     }))
+
+    assert.strictEqual(finished, false, 'finished')
   })
 
   it('updates lastHead after tail reaches the end of the advertisement chain', async () => {
@@ -148,7 +158,7 @@ describe('processNextAdvertisement', () => {
 
     const walkerState = undefined
 
-    const { newState } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -156,6 +166,8 @@ describe('processNextAdvertisement', () => {
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
+
+    assert.strictEqual(finished, true, 'finished')
   })
 
   it('handles a walk that ends but does not link to old chain', async () => {
@@ -172,7 +184,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -180,6 +192,8 @@ describe('processNextAdvertisement', () => {
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
+
+    assert.strictEqual(finished, true, 'finished')
   })
 
   it('updates lastHead after tail reaches lastHead', async () => {
@@ -197,7 +211,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, indexEntry } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, indexEntry, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -207,6 +221,8 @@ describe('processNextAdvertisement', () => {
     }))
 
     assert(indexEntry, 'the step found an index entry')
+
+    assert.strictEqual(finished, true, 'finished')
   })
 })
 

@@ -6,26 +6,24 @@ import { multiaddrToHttpUrl } from './vendored/multiaddr.js'
 const debug = createDebug('spark-piece-indexer:observer')
 
 /** @import { ProviderToInfoMap, ProviderInfo } from './typings.js' */
-/** @import { RedisRepository as Repository } from './redis-repository.js' */
 
 /**
  * @param {object} args
- * @param {Repository} args.repository
  * @param {number} args.minSyncIntervalInMs
  * @param {AbortSignal} [args.signal]
  */
-export async function * runIpniSync ({ repository, minSyncIntervalInMs, signal }) {
+export async function * runIpniSync ({ minSyncIntervalInMs, signal }) {
   while (!signal?.aborted) {
     const started = Date.now()
     try {
       console.log('Syncing from IPNI')
-      const providers = await syncProvidersFromIPNI(repository)
+      const providers = await getProvidersWithMetadata()
       console.log(
         'Found %s providers, %s support(s) HTTP(s)',
         providers.size,
         Array.from(providers.values()).filter(p => p.providerAddress.match(/^https?:\/\//)).length
       )
-      yield [...providers.keys()]
+      yield providers
     } catch (err) {
       console.error('Cannot sync from IPNI.', err)
       // FIXME: log to Sentry
@@ -78,13 +76,4 @@ export async function getProvidersWithMetadata () {
     return [providerId, { providerAddress, lastAdvertisementCID }]
   })
   return new Map(entries)
-}
-
-/**
- * @param {Repository} repository
- */
-export async function syncProvidersFromIPNI (repository) {
-  const providerInfos = await getProvidersWithMetadata()
-  await repository.setIpniInfoForAllProviders(providerInfos)
-  return providerInfos
 }

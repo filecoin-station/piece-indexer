@@ -1,7 +1,10 @@
+import assert from 'assert'
 import { Redis } from 'ioredis'
-import { RedisRepository } from '../lib/redis-repository.js'
+import { walkProviderChain } from '../lib/advertisement-walker.js'
 import { runIpniSync } from '../lib/ipni-watcher.js'
-import { runWalkers, walkProviderChain } from '../lib/advertisement-walker.js'
+import { RedisRepository } from '../lib/redis-repository.js'
+
+/** @import { ProviderToInfoMap } from '../lib/typings.d.ts' */
 
 const {
   REDIS_URL: redisUrl = 'redis://localhost:6379'
@@ -25,19 +28,31 @@ const repository = new RedisRepository(redis)
 /** @type {Map<string, boolean>} */
 const providerWalkers = new Map()
 
-for await (const providerIds of runIpniSync({ repository, minSyncIntervalInMs: 60_000 })) {
-  for (const id of providerIds) {
-    if (providerWalkers.get(id)) continue
+/** @type {ProviderToInfoMap} */
+const recentProvidersInfo = new Map()
 
-    providerWalkers.set(id, true)
+/**
+ * @param {string} providerId
+ */
+const getProviderInfo = async (providerId) => {
+  const info = recentProvidersInfo.get(providerId)
+  assert(!!info, `Unknown providerId ${providerId}`)
+  return info
+}
+
+for await (const providerInfos of runIpniSync({ minSyncIntervalInMs: 60_000 })) {
+  for (const [providerId, providerInfo] of providerInfos.entries()) {
+    recentProvidersInfo.set(providerId, providerInfo)
+    if (providerWalkers.get(providerId)) continue
+
+    providerWalkers.set(providerId, true)
     walkProviderChain({
       repository,
       providerId,
-      // TODO: replace this with an in-memory structure
-      getProviderInfo: async (id) => repository.getIpniInfo(id),
+      getProviderInfo,
       minStepIntervalInMs: 100
     }).finally(
-      () => providerWalkers.set(id, false)
+      () => providerWalkers.set(providerId, false)
     )
   }
 }

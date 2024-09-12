@@ -15,43 +15,6 @@ const debug = createDebug('spark-piece-indexer:observer')
 /**
  * @param {object} args
  * @param {Repository} args.repository
- * @param {number} args.minStepIntervalInMs
- * @param {AbortSignal} [args.signal]
- */
-export async function runWalkers ({ repository, minStepIntervalInMs, signal }) {
-  while (!signal?.aborted) {
-    const started = Date.now()
-
-    console.log('Walking one step')
-    const ipniInfoMap = await repository.getIpniInfoForAllProviders()
-
-    // FIXME: run this concurrently
-    await Promise.allSettled([...ipniInfoMap.entries()].map(
-      async ([providerId, info]) => {
-        if (['12D3KooWKF2Qb8s4gFXsVB1jb98HpcwhWf12b1TA51VqrtY3PmMC'].includes(providerId)) {
-          console.log('Skipping unreachable provider %s', providerId)
-          return
-        }
-
-        try {
-          await walkOneStep(repository, providerId, info)
-          console.log('Ingested another advertisement from %s (%s)', providerId, info.providerAddress)
-        } catch (err) {
-          console.error('Error indexing provider %s (%s):', providerId, info.providerAddress, err)
-        }
-      }))
-
-    const delay = minStepIntervalInMs - (Date.now() - started)
-    if (delay > 0) {
-      console.log('Waiting for %sms before the next walk', delay)
-      await timers.setTimeout(delay)
-    }
-  }
-}
-
-/**
- * @param {object} args
- * @param {Repository} args.repository
  * @param {string} args.providerId
  * @param {(providerId: string) => Promise<ProviderInfo>} args.getProviderInfo
  * @param {number} args.minStepIntervalInMs
@@ -64,21 +27,32 @@ export async function walkProviderChain ({
   minStepIntervalInMs,
   signal
 }) {
+  let stepInterval = minStepIntervalInMs
+
   while (!signal?.aborted) {
     const started = Date.now()
     const providerInfo = await getProviderInfo(providerId)
     let failed = false
     try {
-      await walkOneStep(repository, providerId, providerInfo)
+      const result = await walkOneStep(repository, providerId, providerInfo)
+      if (result.finished) break
+      failed = !!result.failed
     } catch (err) {
       failed = true
       console.error('Error indexing provider %s (%s):', providerId, providerInfo.providerAddress, err)
       // FIXME: capture this error to Sentry
     }
-    // don't retry a failed operation for at least 10 seconds
-    // TODO: store "failed" flag in walker state and don't walk again until a new AdCid is announced
-    const minInterval = failed ? Math.min(minStepIntervalInMs, 10_000) : minStepIntervalInMs
-    const delay = minStepIntervalInMs - (Date.now() - started)
+
+    if (failed) {
+      // exponential back-off for failing requests
+      if (stepInterval < 1_000) stepInterval = 1_000
+      else if (stepInterval < 60_000) stepInterval = stepInterval * 2
+      else stepInterval = 60_000
+    } else {
+      stepInterval = minStepIntervalInMs
+    }
+
+    const delay = stepInterval - (Date.now() - started)
     if (delay > 0) {
       debug('Waiting for %sms before the next walk for provider %s (%s)', delay, providerId, providerInfo.providerAddress)
       await timers.setTimeout(delay)
@@ -93,13 +67,20 @@ export async function walkProviderChain ({
  */
 export async function walkOneStep (repository, providerId, providerInfo) {
   const walkerState = await repository.getWalkerState(providerId)
-  const { newState, indexEntry } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+  const {
+    newState,
+    indexEntry,
+    failed,
+    finished
+  } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+
   if (newState) {
     await repository.setWalkerState(providerId, newState)
   }
   if (indexEntry?.pieceCid) {
     await repository.addPiecePayloadBlocks(providerId, indexEntry.pieceCid, indexEntry.payloadCid)
   }
+  return { failed, finished }
 }
 
 /**
@@ -114,7 +95,8 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
       /** @type {WalkerState} */
       newState: {
         status: `Index provider advertises over an unsupported protocol: ${providerInfo.providerAddress}`
-      }
+      },
+      finished: true
     }
   }
 
@@ -128,7 +110,7 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
     state = { ...currentWalkerState }
   } else if (nextHead === currentWalkerState?.lastHead) {
     debug('No new advertisements from provider %s (%s)', providerId, providerInfo.providerAddress)
-    return {}
+    return { finished: true }
   } else {
     debug('New walk for provider %s (%s): %s', providerId, providerInfo.providerAddress, providerInfo.lastAdvertisementCID)
     state = {
@@ -142,25 +124,43 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
   // TypeScript is not able to infer (yet?) that state.tail is always set by the code above
   assert(state.tail)
 
-  // TODO: handle networking errors, Error: connect ENETUNREACH 154.42.3.42:3104
-  const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(providerInfo.providerAddress, state.tail)
+  try {
+    const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(providerInfo.providerAddress, state.tail)
 
-  if (!previousAdvertisementCid || previousAdvertisementCid === state.lastHead) {
-    // We finished the walk
-    state.lastHead = state.head
-    state.head = undefined
-    state.tail = undefined
-    state.status = `All advertisements from ${state.lastHead} to the end of the chain were processed.`
-  } else {
-    // There are more steps in this walk
-    state.tail = previousAdvertisementCid
-    state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
-  }
+    if (!previousAdvertisementCid || previousAdvertisementCid === state.lastHead) {
+      // We finished the walk
+      state.lastHead = state.head
+      state.head = undefined
+      state.tail = undefined
+      state.status = `All advertisements from ${state.lastHead} to the end of the chain were processed.`
+    } else {
+      // There are more steps in this walk
+      state.tail = previousAdvertisementCid
+      state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
+    }
 
-  const indexEntry = entry.pieceCid ? entry : undefined
-  return {
-    newState: state,
-    indexEntry
+    const indexEntry = entry.pieceCid ? entry : undefined
+    const finished = !state.tail
+    return {
+      newState: state,
+      indexEntry,
+      finished
+    }
+  } catch (err) {
+    // TODO: report details about networking errors, Error: connect ENETUNREACH 154.42.3.42:3104
+    const reason = err && typeof err === 'object' && 'serverMessage' in err ? err.serverMessage : undefined
+    console.error(
+      'Cannot process provider %s (%s) advertisement %s: %s',
+      providerId,
+      providerInfo.providerAddress,
+      state.tail,
+      reason ?? err
+    )
+    state.status = `Cannot process advertisement ${state.tail}: ${reason ?? 'internal error'}`
+    return {
+      newState: state,
+      failed: true
+    }
   }
 }
 
