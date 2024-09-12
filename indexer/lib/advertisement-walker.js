@@ -49,6 +49,14 @@ export async function runWalkers ({ repository, minStepIntervalInMs, signal }) {
   }
 }
 
+/**
+ * @param {object} args
+ * @param {Repository} args.repository
+ * @param {string} args.providerId
+ * @param {(providerId: string) => Promise<ProviderInfo>} args.getProviderInfo
+ * @param {number} args.minStepIntervalInMs
+ * @param {AbortSignal} [args.signal]
+ */
 export async function walkProviderChain ({
   repository,
   providerId,
@@ -59,12 +67,17 @@ export async function walkProviderChain ({
   while (!signal?.aborted) {
     const started = Date.now()
     const providerInfo = await getProviderInfo(providerId)
+    let failed = false
     try {
       await walkOneStep(repository, providerId, providerInfo)
     } catch (err) {
+      failed = true
       console.error('Error indexing provider %s (%s):', providerId, providerInfo.providerAddress, err)
       // FIXME: capture this error to Sentry
     }
+    // don't retry a failed operation for at least 10 seconds
+    // TODO: store "failed" flag in walker state and don't walk again until a new AdCid is announced
+    const minInterval = failed ? Math.min(minStepIntervalInMs, 10_000) : minStepIntervalInMs
     const delay = minStepIntervalInMs - (Date.now() - started)
     if (delay > 0) {
       debug('Waiting for %sms before the next walk for provider %s (%s)', delay, providerId, providerInfo.providerAddress)
