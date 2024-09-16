@@ -39,7 +39,11 @@ describe('processNextAdvertisement', () => {
       lastAdvertisementCID: 'baguqeeraTEST'
     }
 
-    const result = await processNextAdvertisement(providerId, providerInfo, undefined)
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined
+    })
 
     assert.deepStrictEqual(result, {
       finished: true,
@@ -56,7 +60,7 @@ describe('processNextAdvertisement', () => {
       lastAdvertisementCID: knownAdvertisement.adCid
     }
     const walkerState = undefined
-    const result = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const result = await processNextAdvertisement({ providerId, providerInfo, walkerState })
     assert.deepStrictEqual(result, {
       /** @type {WalkerState} */
       newState: {
@@ -88,7 +92,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const result = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const result = await processNextAdvertisement({ providerId, providerInfo, walkerState })
     assert.deepStrictEqual(result, {
       finished: true
     })
@@ -109,7 +113,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, indexEntry, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, indexEntry, finished } = await processNextAdvertisement({ providerId, providerInfo, walkerState })
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: walkerState.head, // this does not change during the walk
@@ -137,7 +141,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement({ providerId, providerInfo, walkerState })
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: knownAdvertisement.adCid,
@@ -158,7 +162,7 @@ describe('processNextAdvertisement', () => {
 
     const walkerState = undefined
 
-    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement({ providerId, providerInfo, walkerState })
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -184,7 +188,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, finished } = await processNextAdvertisement({ providerId, providerInfo, walkerState })
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -211,7 +215,7 @@ describe('processNextAdvertisement', () => {
       status: 'some-status'
     }
 
-    const { newState, indexEntry, finished } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+    const { newState, indexEntry, finished } = await processNextAdvertisement({ providerId, providerInfo, walkerState })
 
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
       head: undefined, // we finished the walk, there is no head
@@ -223,6 +227,51 @@ describe('processNextAdvertisement', () => {
     assert(indexEntry, 'the step found an index entry')
 
     assert.strictEqual(finished, true, 'finished')
+  })
+
+  it('handles Fetch errors and explains the problem in the status', async () => {
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: 'http://127.0.0.1:80/',
+      lastAdvertisementCID: 'baguqeeraTEST'
+    }
+
+    const result = await processNextAdvertisement({ providerId, providerInfo, walkerState: undefined })
+
+    assert.deepStrictEqual(result, {
+      failed: true,
+      newState: {
+        head: 'baguqeeraTEST',
+        tail: 'baguqeeraTEST',
+        lastHead: undefined,
+        status: 'Error processing baguqeeraTEST: HTTP request to http://127.0.0.1/ipni/v1/ad/baguqeeraTEST failed: connect ECONNREFUSED 127.0.0.1:80'
+      }
+    })
+  })
+
+  it('handles timeout errors and explains the problem in the status', async () => {
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: 'http://127.0.0.1:80/',
+      lastAdvertisementCID: 'baguqeeraTEST'
+    }
+
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined,
+      fetchTimeout: 1
+    })
+
+    assert.deepStrictEqual(result, {
+      failed: true,
+      newState: {
+        head: 'baguqeeraTEST',
+        tail: 'baguqeeraTEST',
+        lastHead: undefined,
+        status: 'Error processing baguqeeraTEST: HTTP request to http://127.0.0.1/ipni/v1/ad/baguqeeraTEST timed out'
+      }
+    })
   })
 })
 
@@ -279,7 +328,7 @@ describe('walkOneStep', () => {
       lastAdvertisementCID: nextHead
     }
 
-    await walkOneStep(repository, providerId, providerInfo)
+    await walkOneStep({ repository, providerId, providerInfo })
 
     const newState = await repository.getWalkerState(providerId)
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({

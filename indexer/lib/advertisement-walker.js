@@ -34,7 +34,7 @@ export async function walkProviderChain ({
     const providerInfo = await getProviderInfo(providerId)
     let failed = false
     try {
-      const result = await walkOneStep(repository, providerId, providerInfo)
+      const result = await walkOneStep({ repository, providerId, providerInfo })
       if (result.finished) break
       failed = !!result.failed
     } catch (err) {
@@ -61,18 +61,20 @@ export async function walkProviderChain ({
 }
 
 /**
- * @param {Repository} repository
- * @param {string} providerId
- * @param {ProviderInfo} providerInfo
+ * @param {object} args
+ * @param {Repository} args.repository
+ * @param {string} args.providerId
+ * @param {ProviderInfo} args.providerInfo
+ * @param {number} [args.fetchTimeout]
  */
-export async function walkOneStep (repository, providerId, providerInfo) {
+export async function walkOneStep ({ repository, providerId, providerInfo, fetchTimeout }) {
   const walkerState = await repository.getWalkerState(providerId)
   const {
     newState,
     indexEntry,
     failed,
     finished
-  } = await processNextAdvertisement(providerId, providerInfo, walkerState)
+  } = await processNextAdvertisement({ providerId, providerInfo, walkerState, fetchTimeout })
 
   if (newState) {
     await repository.setWalkerState(providerId, newState)
@@ -84,11 +86,18 @@ export async function walkOneStep (repository, providerId, providerInfo) {
 }
 
 /**
- * @param {string} providerId
- * @param {ProviderInfo} providerInfo
- * @param {WalkerState | undefined} currentWalkerState
+ * @param {object} args
+ * @param {string} args.providerId
+ * @param {ProviderInfo} args.providerInfo
+ * @param {WalkerState | undefined} args.walkerState
+ * @param {number} [args.fetchTimeout]
  */
-export async function processNextAdvertisement (providerId, providerInfo, currentWalkerState) {
+export async function processNextAdvertisement ({
+  providerId,
+  providerInfo,
+  walkerState,
+  fetchTimeout
+}) {
   if (!providerInfo.providerAddress?.match(/^https?:\/\//)) {
     debug('Skipping provider %s - address is not HTTP(s): %s', providerId, providerInfo.providerAddress)
     return {
@@ -105,10 +114,10 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
   /** @type {WalkerState} */
   let state
 
-  if (currentWalkerState?.tail) {
-    debug('Next step for provider %s (%s): %s', providerId, providerInfo.providerAddress, currentWalkerState.tail)
-    state = { ...currentWalkerState }
-  } else if (nextHead === currentWalkerState?.lastHead) {
+  if (walkerState?.tail) {
+    debug('Next step for provider %s (%s): %s', providerId, providerInfo.providerAddress, walkerState.tail)
+    state = { ...walkerState }
+  } else if (nextHead === walkerState?.lastHead) {
     debug('No new advertisements from provider %s (%s)', providerId, providerInfo.providerAddress)
     return { finished: true }
   } else {
@@ -116,7 +125,7 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
     state = {
       head: nextHead,
       tail: nextHead,
-      lastHead: currentWalkerState?.lastHead,
+      lastHead: walkerState?.lastHead,
       status: 'placeholder'
     }
   }
@@ -125,7 +134,11 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
   assert(state.tail)
 
   try {
-    const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(providerInfo.providerAddress, state.tail)
+    const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(
+      providerInfo.providerAddress,
+      state.tail,
+      { fetchTimeout }
+    )
 
     if (!previousAdvertisementCid || previousAdvertisementCid === state.lastHead) {
       // We finished the walk
@@ -147,8 +160,25 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
       finished
     }
   } catch (err) {
-    // TODO: report details about networking errors, Error: connect ENETUNREACH 154.42.3.42:3104
-    const reason = err && typeof err === 'object' && 'serverMessage' in err ? err.serverMessage : undefined
+    let reason
+    if (err instanceof Error) {
+      const url = 'url' in err ? err.url : undefined
+      if ('serverMessage' in err && err.serverMessage) {
+        reason = err.serverMessage
+      } else if ('statusCode' in err && err.statusCode) {
+        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.statusCode}`
+      } else if (err.name === 'TimeoutError') {
+        reason = `HTTP request to ${url ?? providerInfo.providerAddress} timed out`
+      } else if (
+        err.name === 'TypeError' &&
+        err.message === 'fetch failed' &&
+        err.cause &&
+        err.cause instanceof Error
+      ) {
+        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.cause.message}`
+      }
+    }
+
     console.error(
       'Cannot process provider %s (%s) advertisement %s: %s',
       providerId,
@@ -156,7 +186,7 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
       state.tail,
       reason ?? err
     )
-    state.status = `Cannot process advertisement ${state.tail}: ${reason ?? 'internal error'}`
+    state.status = `Error processing ${state.tail}: ${reason ?? 'internal error'}`
     return {
       newState: state,
       failed: true
@@ -172,8 +202,10 @@ export async function processNextAdvertisement (providerId, providerInfo, curren
 /**
  * @param {string} providerAddress
  * @param {string} advertisementCid
+ * @param {object} [options]
+ * @param {number} [options.fetchTimeout]
  */
-export async function fetchAdvertisedPayload (providerAddress, advertisementCid) {
+export async function fetchAdvertisedPayload (providerAddress, advertisementCid, { fetchTimeout } = {}) {
   const advertisement =
     /** @type {{
       Addresses: string[],
@@ -189,7 +221,7 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid)
         }
       }
      }} */(
-      await fetchCid(providerAddress, advertisementCid)
+      await fetchCid(providerAddress, advertisementCid, { fetchTimeout })
     )
   const previousAdvertisementCid = advertisement.PreviousID?.['/']
   debug('advertisement %s %j', advertisementCid, advertisement)
@@ -207,7 +239,7 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid)
     /** @type {{
      Entries: { '/' :  { bytes: string } }[]
     }} */(
-      await fetchCid(providerAddress, entriesCid)
+      await fetchCid(providerAddress, entriesCid, { fetchTimeout })
     )
   debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
   const entryHash = entriesChunk.Entries[0]['/'].bytes
@@ -226,15 +258,23 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid)
 /**
  * @param {string} providerBaseUrl
  * @param {string} cid
+ * @param {object} [options]
+ * @param {number} [options.fetchTimeout]
  * @returns {Promise<unknown>}
  */
-async function fetchCid (providerBaseUrl, cid) {
+async function fetchCid (providerBaseUrl, cid, { fetchTimeout } = {}) {
   const url = new URL(cid, new URL('/ipni/v1/ad/_cid_placeholder_', providerBaseUrl))
   debug('Fetching %s', url)
-  // const res = await fetch(url)
-  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-  await assertOkResponse(res)
-  return await res.json()
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(fetchTimeout ?? 30_000) })
+    await assertOkResponse(res)
+    return await res.json()
+  } catch (err) {
+    if (err && typeof err === 'object') {
+      Object.assign(err, { url })
+    }
+    throw err
+  }
 }
 
 /**
