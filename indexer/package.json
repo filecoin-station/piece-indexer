@@ -8,12 +8,12 @@
     "test": "node --test"
   },
   "devDependencies": {
-    "@ipld/dag-cbor": "^9.2.1",
-    "multiformats": "^13.2.2",
     "standard": "^17.1.2"
   },
   "dependencies": {
+    "@ipld/dag-cbor": "^9.2.1",
     "debug": "^4.3.7",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "multiformats": "^13.2.2"
   }
 }
