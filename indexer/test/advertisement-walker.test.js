@@ -1,6 +1,9 @@
 import { Redis } from 'ioredis'
 import assert from 'node:assert'
+import { once } from 'node:events'
+import http from 'node:http'
 import { after, before, beforeEach, describe, it } from 'node:test'
+import { setTimeout } from 'node:timers/promises'
 import {
   fetchAdvertisedPayload,
   processNextAdvertisement,
@@ -250,9 +253,19 @@ describe('processNextAdvertisement', () => {
   })
 
   it('handles timeout errors and explains the problem in the status', async () => {
+    const server = http.createServer(async (_req, res) => {
+      await setTimeout(500)
+      res.statusCode = 501
+      res.end()
+    })
+    server.listen(0, '127.0.0.1')
+    server.unref()
+    await once(server, 'listening')
+    const serverPort = /** @type {import('node:net').AddressInfo} */(server.address()).port
+
     /** @type {ProviderInfo} */
     const providerInfo = {
-      providerAddress: 'http://127.0.0.1:80/',
+      providerAddress: `http://127.0.0.1:${serverPort}/`,
       lastAdvertisementCID: 'baguqeeraTEST'
     }
 
@@ -269,7 +282,7 @@ describe('processNextAdvertisement', () => {
         head: 'baguqeeraTEST',
         tail: 'baguqeeraTEST',
         lastHead: undefined,
-        status: 'Error processing baguqeeraTEST: HTTP request to http://127.0.0.1/ipni/v1/ad/baguqeeraTEST timed out'
+        status: `Error processing baguqeeraTEST: HTTP request to http://127.0.0.1:${serverPort}/ipni/v1/ad/baguqeeraTEST timed out`
       }
     })
   })
