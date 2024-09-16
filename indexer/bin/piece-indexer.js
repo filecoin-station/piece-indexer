@@ -1,6 +1,6 @@
 import assert from 'assert'
 import { Redis } from 'ioredis'
-import { walkProviderChain } from '../lib/advertisement-walker.js'
+import { walkChain } from '../lib/advertisement-walker.js'
 import { runIpniSync } from '../lib/ipni-watcher.js'
 import { RedisRepository } from '../lib/redis-repository.js'
 
@@ -25,8 +25,8 @@ const redis = new Redis({
 await redis.connect()
 const repository = new RedisRepository(redis)
 
-/** @type {Map<string, boolean>} */
-const providerWalkers = new Map()
+/** @type {Set<string>} */
+const providerIdsActivelyWalked = new Set()
 
 /** @type {ProviderToInfoMap} */
 const recentProvidersInfo = new Map()
@@ -43,16 +43,16 @@ const getProviderInfo = async (providerId) => {
 for await (const providerInfos of runIpniSync({ minSyncIntervalInMs: 60_000 })) {
   for (const [providerId, providerInfo] of providerInfos.entries()) {
     recentProvidersInfo.set(providerId, providerInfo)
-    if (providerWalkers.get(providerId)) continue
+    if (providerIdsActivelyWalked.has(providerId)) continue
 
-    providerWalkers.set(providerId, true)
-    walkProviderChain({
+    providerIdsActivelyWalked.add(providerId)
+    walkChain({
       repository,
       providerId,
       getProviderInfo,
       minStepIntervalInMs: 100
     }).finally(
-      () => providerWalkers.set(providerId, false)
+      () => providerIdsActivelyWalked.delete(providerId)
     )
   }
 }

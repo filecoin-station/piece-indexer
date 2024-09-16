@@ -10,7 +10,7 @@ import { assertOkResponse } from './http-assertions.js'
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
 /** @import { RedisRepository as Repository } from './redis-repository.js' */
 
-const debug = createDebug('spark-piece-indexer:observer')
+const debug = createDebug('spark-piece-indexer:advertisement-walker')
 
 /**
  * @param {object} args
@@ -20,7 +20,7 @@ const debug = createDebug('spark-piece-indexer:observer')
  * @param {number} args.minStepIntervalInMs
  * @param {AbortSignal} [args.signal]
  */
-export async function walkProviderChain ({
+export async function walkChain ({
   repository,
   providerId,
   getProviderInfo,
@@ -179,7 +179,7 @@ export async function processNextAdvertisement ({
       }
     }
 
-    console.error(
+    debug(
       'Cannot process provider %s (%s) advertisement %s: %s',
       providerId,
       providerInfo.providerAddress,

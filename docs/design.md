@@ -36,8 +36,9 @@ Label-based CID discovery and full Piece Index sampling.
 
 Let's implement a lightweight IPNI ingester that will process the advertisements
 from Filecoin SPs and extract the list of `(ProviderID, PieceCID, PayloadCID)`
-entries. Store these entries in a Postgres database. Provide a REST API endpoint
-accepting `(ProviderID, PieceCID)` and returning a single `PayloadCID`.
+entries. Store these entries in a persisted datastore (Redis). Provide a REST
+API endpoint accepting `(ProviderID, PieceCID)` and returning a single
+`PayloadCID`.
 
 ### Terminology
 
@@ -188,13 +189,13 @@ head is published before we finish processing the chain.
 
 #### Proposed algorithm
 
-**Persisted state (per provider)**
+**Per-provider state**
 
-Use the following per-provider state persisted in the database:
+Use the following per-provider state:
 
 - `providerId` - Primary key.
 
-- Provider info obtained from IPNI
+- Provider info obtained from IPNI - stored in memory only:
 
   - `providerAddress` - Provider's address where we can fetch advertisements
     from.
@@ -202,7 +203,7 @@ Use the following per-provider state persisted in the database:
   - `lastAdvertisementCID` - The CID of the most recent head seen by
     cid.contact. This is where we need to start the next walk from.
 
-- Provider walker state:
+- Provider walker state - persisted in our datastore (Redis):
 
   - `head` - The CID of the head advertisement we started the current walk from.
     We update this value whenever we start a new walk.
@@ -218,15 +219,16 @@ Use the following per-provider state persisted in the database:
     > walking the "old" chain, new advertisements (new heads) will be announced
     > to IPNI.
     >
-    > - `next_head` is the latest head announced to IPNI
+    > - `lastAdvertisementCID` is the latest head announced to IPNI
     > - `head` is the advertisement where the current walk-in-progress started
     >
-    > I suppose we don't need to keep track of `next_head`. When the current
-    > walk finishes, we will wait up to one minute until we make another request
-    > to cid.contact to find what are the latest heads for each SPs.
+    > I suppose we don't need to keep track of `lastAdvertisementCID`. When the
+    > current walk finishes, we could wait up to one minute until we make
+    > another request to cid.contact to find what are the latest heads for each
+    > SPs.
     >
     > In the current proposal, when the current walk finishes, we can
-    > immediately continue with walking from the `next_head`.
+    > immediately continue with walking from the `lastAdvertisementCID`.
 
 We must always walk the chain all the way to the genesis or to the entry we have
 already seen & processed.
@@ -276,27 +278,13 @@ Every minute, run the following high-level loop:
 1. Fetch the list of providers and their latest advertisements (heads) from
    https://cid.contact/providers. (This is **one** HTTP request.)
 
-2. Fetch the state of all providers from our database. (This is **one** SQL
-   query.)
-
-3. Update the state of each provider as described below, using the name
-   `LastAdvertisement` for the CID of the latest advertisement provided in the
-   response from cid.contact. (This is a small bit of computation plus **one**
-   SQL query.)
+2. Update the in-memory info we keep for each provider (address, CID of the last
+   advertisement).
 
 > **Note:** Instead of running the loop every minute, we can introduce a
 > one-minute delay between the iterations instead. It should not matter too much
-> in practice, though. I expect each iteration to finish within one minute:
->
-> - The three steps outlined above require only three interactions over
->   HTTP/SQL.
-> - The long chain walks are executed in the background and don't block this
->   loop.
-
-For each provider listed in the response:
-
-1. Update `providerAddress` and `next_head` with the values received from IPNI.
-   Persist this information in the database.
+> in practice, though. I expect each iteration to finish within one minute, as
+> it's just a single HTTP call to cid.contact.
 
 **Walk advertisement chains (in background)**
 
@@ -305,27 +293,28 @@ steps.
 
 1. Preparation
 
-- If `tail` is not null, then there is an ongoing walk of the chain we need to
-  continue.
+   - If `tail` is not null, then there is an ongoing walk of the chain we need
+     to continue.
 
-- Otherwise, if `nextHead` is the same as `lastHead`, then there are no new
-  advertisement to process and the walk immediately returns.
+   - Otherwise, if `nextHead` is the same as `lastHead`, then there are no new
+     advertisement to process and the walk immediately returns.
 
-- Otherwise, we are starting a new walk. Update the walker state as follows:
+   - Otherwise, we are starting a new walk. Update the walker state as follows:
 
-  ```
-  head := newHead
-  tail := newHead
-  ```
+     ```
+     head := newHead
+     tail := newHead
+     ```
 
-  (`lastHead` does not change until we finish the walk.)
+     (`lastHead` does not change until we finish the walk.)
 
 2. Take one step
 
    1. Fetch the advertisement identified by `tail` from the index provider.
 
-   2. Process the metadata and entries to extract one `(PieceCID, PayloadCID)`
-      entry.
+   2. Process the metadata and entries to extract up to one
+      `(PieceCID, PayloadCID)` entry to be added to the index and `PreviousID`
+      linking to the next advertisement in the chain to process.
 
 3. Update the worker state
 

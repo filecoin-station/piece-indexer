@@ -3,7 +3,7 @@ import timers from 'node:timers/promises'
 import { assertOkResponse } from './http-assertions.js'
 import { multiaddrToHttpUrl } from './vendored/multiaddr.js'
 
-const debug = createDebug('spark-piece-indexer:observer')
+const debug = createDebug('spark-piece-indexer:ipni-watcher')
 
 /** @import { ProviderToInfoMap, ProviderInfo } from './typings.js' */
 
