@@ -48,36 +48,27 @@ export class RedisRepository {
   }
 
   /**
-   * @param {"ipni-state" | "walker-state"} keyPrefix "ipni-state" or "walker-state"
+   * @param {string} providerId
    */
-  async #scanEntries (keyPrefix) {
-    /** @type {string[]} */
-    const redisKeys = []
+  async countPiecesIndexed (providerId) {
     const keyStream = this.#redis.scanStream({
-      match: `${keyPrefix}:*`,
-      count: 1000
+      match: `piece-payload:${providerId}:*`,
+      count: 64_000
     })
+
+    // We need to de-duplicate the keys returned by Redis.
+    // See https://redis.io/docs/latest/commands/scan/
+    // > A given element may be returned multiple times. It is up to the application to handle the
+    // > case of duplicated elements, for example only using the returned elements in order to perform
+    // > operations that are safe when re-applied multiple times.
+    /** @type {Set<string>} */
+    const uniquePieces = new Set()
     for await (const chunk of keyStream) {
-      redisKeys.push(...chunk)
-    }
-
-    if (!redisKeys.length) return []
-
-    const stringValues = await this.#redis.mget(redisKeys)
-
-    /** @type {[string, string][]} */
-    const result = []
-    for (let ix = 0; ix < redisKeys.length; ix++) {
-      const prefixedKey = redisKeys[ix]
-      const value = stringValues[ix]
-      if (!value) {
-        console.error('Unexpected Redis state: the existing key %s does not have any value', prefixedKey)
-        continue
+      for (const key of chunk) {
+        uniquePieces.add(key)
       }
-      const key = prefixedKey.split(':')[1]
-      result.push([key, value])
     }
 
-    return result
+    return uniquePieces.size
   }
 }

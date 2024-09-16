@@ -342,3 +342,70 @@ describe('walkOneStep', () => {
     assert.deepStrictEqual(pieceBlocks, [knownAdvertisement.payloadCid])
   })
 })
+
+describe('data schema for REST API', () => {
+  /** @type {Redis} */
+  let redis
+  /** @type {RedisRepository} */
+  let repository
+
+  before(async () => {
+    redis = new Redis({ db: 1 })
+
+    repository = new RedisRepository(redis)
+
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress,
+      lastAdvertisementCID: knownAdvertisement.adCid
+    }
+
+    await walkOneStep({ repository, providerId, providerInfo })
+  })
+
+  after(async () => {
+    await redis?.disconnect()
+  })
+
+  it('supports GET /sample/{providerId}/{pieceCid}', async () => {
+    // Proposed API response - see docs/design.md
+    // {
+    //   "samples": ["exactly one CID of a payload block advertised for PieceCID"],
+    //   "pubkey": "server's public key",
+    //   "signature": "signature over dag-json{providerId,pieceCid,seed,samples}"
+    // }
+    // pubkey & signature will be handled by the REST API server,
+    // we are only interested in `samples` in this test
+    const samples = await repository.getPiecePayloadBlocks(providerId, knownAdvertisement.pieceCid)
+    assert.deepStrictEqual(samples, [knownAdvertisement.payloadCid])
+  })
+
+  it('supports GET /ingestion-status/{providerId}', async () => {
+    // Proposed API response - see docs/design.md
+    // {
+    //   "providerId": "state.providerId",
+    //   "providerAddress": "state.providerAddress",
+    //   "ingestionStatus": "state.ingestion_status",
+    //   "lastHeadWalkedFrom": "state.lastHead",
+    //   "piecesIndexed": 123
+    //   // ^^ number of (PieceCID, PayloadCID) records found for this provider
+    // }
+    const walkerState = await repository.getWalkerState(providerId)
+    const response = {
+      providerId,
+      // Discussion point:
+      // We don't have providerAddress in the walker state.
+      // Is it a problem if our observability API does not tell the provider address?
+      ingestionStatus: walkerState.status,
+      lastHeadWalkedFrom: walkerState.lastHead ?? walkerState.head,
+      piecesIndexed: await repository.countPiecesIndexed(providerId)
+    }
+
+    assert.deepStrictEqual(response, {
+      providerId,
+      ingestionStatus: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`,
+      lastHeadWalkedFrom: knownAdvertisement.adCid,
+      piecesIndexed: 1
+    })
+  })
+})
