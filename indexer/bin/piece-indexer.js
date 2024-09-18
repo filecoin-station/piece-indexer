@@ -36,7 +36,7 @@ const recentProvidersInfo = new Map()
  */
 const getProviderInfo = async (providerId) => {
   const info = recentProvidersInfo.get(providerId)
-  assert(!!info, `Unknown providerId ${providerId}`)
+  assert(info, `Unknown providerId ${providerId}`)
   return info
 }
 
