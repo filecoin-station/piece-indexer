@@ -33,8 +33,11 @@ export async function walkChain ({
     const started = Date.now()
     const providerInfo = await getProviderInfo(providerId)
     let failed = false
+    /** @type {WalkerState | undefined} */
+    let walkerState
     try {
-      const result = await walkOneStep({ repository, providerId, providerInfo })
+      const result = await walkOneStep({ repository, providerId, providerInfo, walkerState })
+      walkerState = result.walkerState
       if (result.finished) break
       failed = !!result.failed
     } catch (err) {
@@ -65,10 +68,13 @@ export async function walkChain ({
  * @param {Repository} args.repository
  * @param {string} args.providerId
  * @param {ProviderInfo} args.providerInfo
+ * @param {WalkerState} [args.walkerState]
  * @param {number} [args.fetchTimeout]
  */
-export async function walkOneStep ({ repository, providerId, providerInfo, fetchTimeout }) {
-  const walkerState = await repository.getWalkerState(providerId)
+export async function walkOneStep ({ repository, providerId, providerInfo, fetchTimeout, walkerState }) {
+  if (!walkerState) {
+    walkerState = await repository.getWalkerState(providerId)
+  }
   const {
     newState,
     indexEntry,
@@ -78,11 +84,12 @@ export async function walkOneStep ({ repository, providerId, providerInfo, fetch
 
   if (newState) {
     await repository.setWalkerState(providerId, newState)
+    walkerState = newState
   }
   if (indexEntry?.pieceCid) {
     await repository.addPiecePayloadBlocks(providerId, indexEntry.pieceCid, indexEntry.payloadCid)
   }
-  return { failed, finished }
+  return { failed, finished, walkerState }
 }
 
 /**

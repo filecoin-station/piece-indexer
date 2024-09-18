@@ -341,7 +341,9 @@ describe('walkOneStep', () => {
       lastAdvertisementCID: nextHead
     }
 
-    await walkOneStep({ repository, providerId, providerInfo })
+    const result = await walkOneStep({ repository, providerId, providerInfo })
+    assert.strictEqual(!!result.finished, false)
+    assert.strictEqual(!!result.failed, false)
 
     const newState = await repository.getWalkerState(providerId)
     assert.deepStrictEqual(newState, /** @type {WalkerState} */({
@@ -350,6 +352,8 @@ describe('walkOneStep', () => {
       // lastHead: undefined,
       status: `Walking the advertisements from ${nextHead}, next step: ${knownAdvertisement.previousAdCid}`
     }))
+
+    assert.deepStrictEqual(result.walkerState, { lastHead: undefined, ...newState })
 
     const pieceBlocks = await repository.getPiecePayloadBlocks(providerId, knownAdvertisement.pieceCid)
     assert.deepStrictEqual(pieceBlocks, [knownAdvertisement.payloadCid])
