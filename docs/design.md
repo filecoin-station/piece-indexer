@@ -234,7 +234,7 @@ We must always walk the chain all the way to the genesis or to the entry we have
 already seen & processed.
 
 The current walk starts from `head` and walks up to `lastHead`. When the current
-walk reaches `lastHead`, we need to set `last_head ← head` so that the next walk
+walk reaches `lastHead`, we need to set `lastHead ← head` so that the next walk
 knows where to stop.
 
 `lastAdvertisementCID` is updated every minute when we query cid.contact for the

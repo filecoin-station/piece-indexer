@@ -27,7 +27,7 @@ lastAdCID --> [ ] -\
                ↓    |
               [ ] -/
                ↓
-last_head --> [ ] -\
+ lastHead --> [ ] -\
                ↓    |
               ...   | entries visited in the previous walks
                ↓    |
