@@ -28,16 +28,17 @@ export async function walkChain ({
   signal
 }) {
   let stepInterval = minStepIntervalInMs
+  let walkerState
 
   while (!signal?.aborted) {
     const started = Date.now()
     const providerInfo = await getProviderInfo(providerId)
     let failed = false
     /** @type {WalkerState | undefined} */
-    let walkerState
     try {
       const result = await walkOneStep({ repository, providerId, providerInfo, walkerState })
       walkerState = result.walkerState
+      debug('Got new walker state for provider %s: %o', providerId, walkerState)
       if (result.finished) break
       failed = !!result.failed
     } catch (err) {
@@ -73,7 +74,10 @@ export async function walkChain ({
  */
 export async function walkOneStep ({ repository, providerId, providerInfo, fetchTimeout, walkerState }) {
   if (!walkerState) {
+    debug('FETCHING walker state from the repository for provider %s (%s)', providerId, providerInfo.providerAddress)
     walkerState = await repository.getWalkerState(providerId)
+  } else {
+    debug('REUSING walker state for provider %s (%s)', providerId, providerInfo.providerAddress)
   }
   const {
     newState,
