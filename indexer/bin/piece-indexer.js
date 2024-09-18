@@ -26,7 +26,7 @@ await redis.connect()
 const repository = new RedisRepository(redis)
 
 /** @type {Set<string>} */
-const providerIdsActivelyWalked = new Set()
+const providerIdsBeingWalked = new Set()
 
 /** @type {ProviderToInfoMap} */
 const recentProvidersInfo = new Map()
