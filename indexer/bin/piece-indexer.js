@@ -43,16 +43,16 @@ const getProviderInfo = async (providerId) => {
 for await (const providerInfos of runIpniSync({ minSyncIntervalInMs: 60_000 })) {
   for (const [providerId, providerInfo] of providerInfos.entries()) {
     recentProvidersInfo.set(providerId, providerInfo)
-    if (providerIdsActivelyWalked.has(providerId)) continue
+    if (providerIdsBeingWalked.has(providerId)) continue
 
-    providerIdsActivelyWalked.add(providerId)
+    providerIdsBeingWalked.add(providerId)
     walkChain({
       repository,
       providerId,
       getProviderInfo,
       minStepIntervalInMs: 100
     }).finally(
-      () => providerIdsActivelyWalked.delete(providerId)
+      () => providerIdsBeingWalked.delete(providerId)
     )
   }
 }
