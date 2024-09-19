@@ -1,0 +1,9 @@
+app = "spark-piece-indexer"
+primary_region = "cdg"
+
+[env]
+  SENTRY_ENVIRONMENT = "production"
+  NPM_CONFIG_WORKSPACE = "indexer"
+
+[deploy]
+  strategy = "rolling"

@@ -3,17 +3,17 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dry-run": "node bin/dry-run.js",
-    "migrate": "node bin/migrate.js",
     "start": "node bin/piece-indexer.js",
     "lint": "standard",
-    "test": "node --test"
+    "test": "node --test --test-reporter=spec"
   },
   "devDependencies": {
     "standard": "^17.1.2"
   },
   "dependencies": {
+    "@ipld/dag-cbor": "^9.2.1",
     "debug": "^4.3.7",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "multiformats": "^13.2.2"
   }
 }
