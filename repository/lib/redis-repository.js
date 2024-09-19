@@ -1,4 +1,4 @@
-/** @import { WalkerState } from './typings.js' */
+/** @import { WalkerState } from './typings.d.ts' */
 
 export class RedisRepository {
   #redis

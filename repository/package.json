@@ -1,0 +1,14 @@
+{
+  "name": "@filecoin-station/spark-piece-indexer-repository",
+  "type": "module",
+  "main": "lib/redis-repository.js",
+  "private": true,
+  "scripts": {
+    "lint": "standard",
+    "test": "node --test --test-reporter=spec"
+  },
+  "devDependencies": {
+    "ioredis": "^5.4.1",
+    "standard": "^17.1.2"
+  }
+}

@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "indexer"
+    "indexer",
+    "repository"
   ],
   "scripts": {
     "lint": "prettier --check . && standard",

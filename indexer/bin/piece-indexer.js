@@ -1,8 +1,8 @@
 import assert from 'assert'
+import { RedisRepository } from '@filecoin-station/spark-piece-indexer-repository'
 import { Redis } from 'ioredis'
 import { walkChain } from '../lib/advertisement-walker.js'
 import { runIpniSync } from '../lib/ipni-watcher.js'
-import { RedisRepository } from '../lib/redis-repository.js'
 
 /** @import { ProviderToInfoMap } from '../lib/typings.d.ts' */
 

@@ -8,7 +8,7 @@ import timers from 'node:timers/promises'
 import { assertOkResponse } from './http-assertions.js'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
-/** @import { RedisRepository as Repository } from './redis-repository.js' */
+/** @import { RedisRepository as Repository } from '@filecoin-station/spark-piece-indexer-repository' */
 
 const debug = createDebug('spark-piece-indexer:advertisement-walker')
 
