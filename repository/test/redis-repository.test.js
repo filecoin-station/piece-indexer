@@ -20,6 +20,10 @@ describe('data schema for REST API', () => {
     await redis.flushall()
   })
 
+  after(async () => {
+    await redis?.disconnect()
+  })
+
   it('persists WalkerState', async () => {
     /** @type {WalkerState} */
     const state = {
@@ -32,9 +36,5 @@ describe('data schema for REST API', () => {
     await repository.setWalkerState('providerId', state)
     const loaded = await repository.getWalkerState('providerId')
     assert.deepStrictEqual(loaded, state)
-  })
-
-  after(async () => {
-    await redis?.disconnect()
   })
 })

@@ -1,0 +1,17 @@
+{
+  "name": "@filecoin-station/spark-piece-indexer-api",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node bin/api-server.js",
+    "lint": "standard",
+    "test": "node --test --test-reporter=spec"
+  },
+  "devDependencies": {
+    "standard": "^17.1.2"
+  },
+  "dependencies": {
+    "http-responders": "^2.2.0",
+    "ioredis": "^5.4.1"
+  }
+}
