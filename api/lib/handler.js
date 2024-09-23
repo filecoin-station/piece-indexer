@@ -66,11 +66,15 @@ async function handleRequest (req, res, { repository, domain, logger }) {
  */
 async function samplePiecePayloadBlocks (req, res, repository, providerId, pieceCid, searchParams) {
   const payloadCids = await repository.getPiecePayloadBlocks(providerId, pieceCid)
-  // TODO: set caching headers
-  return json(res, {
-    samples: [payloadCids[0]]
-    // todo: pubkey, signature
-  })
+  const body = {}
+  if (payloadCids.length) {
+    body.samples = payloadCids.slice(0, 1)
+    res.setHeader('cache-control', `public, max-age=${24 * 3600 /* 24 hours */}, immutable`)
+  } else {
+    body.error = 'PROVIDER_OR_PIECE_NOT_FOUND'
+    res.setHeader('cache-control', `public, max-age=${60 /* 1min */}`)
+  }
+  return json(res, body)
 }
 
 /**
@@ -81,6 +85,15 @@ async function samplePiecePayloadBlocks (req, res, repository, providerId, piece
  */
 async function getProviderIngestionStatus (req, res, repository, providerId) {
   const walkerState = await repository.getWalkerState(providerId)
+  res.setHeader('cache-control', `public, max-age=${60 /* 1min */}`)
+
+  if (!walkerState) {
+    return json(res, {
+      providerId,
+      ingestionStatus: 'Unknown provider ID'
+    })
+  }
+
   return json(res, {
     providerId,
     // Discussion point:

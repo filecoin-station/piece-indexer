@@ -69,11 +69,43 @@ describe('HTTP request handler', () => {
       assert.deepStrictEqual(body, {
         samples: ['payload-cid-1']
       })
-
-      // TODO: assert cache settings
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+        `public, max-age=${24 * 3600}, immutable`
+      )
     })
 
-    // TODO: handle unknown provider, unknown piece
+    it('returns error when provider is not found', async () => {
+      await repository.addPiecePayloadBlocks('provider-id', 'piece-cid', 'payload-cid')
+
+      const res = await fetch(new URL('/sample/unknown-provider-id/piece-cid', baseUrl))
+      await assertResponseStatus(res, 200)
+      const body = await res.json()
+
+      assert.deepStrictEqual(body, {
+        error: 'PROVIDER_OR_PIECE_NOT_FOUND'
+      })
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+        `public, max-age=${60}`
+      )
+    })
+
+    it('returns error when provider piece is not found', async () => {
+      await repository.addPiecePayloadBlocks('provider-id', 'piece-cid', 'payload-cid')
+
+      const res = await fetch(new URL('/sample/provider-id/unknown-piece-cid', baseUrl))
+      await assertResponseStatus(res, 200)
+      const body = await res.json()
+
+      assert.deepStrictEqual(body, {
+        error: 'PROVIDER_OR_PIECE_NOT_FOUND'
+      })
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+        `public, max-age=${60}`
+      )
+    })
   })
 
   describe('GET /ingestion-status/{providerId}', () => {
@@ -94,10 +126,54 @@ describe('HTTP request handler', () => {
         piecesIndexed: 1
       })
 
-      // TODO: assert cache settings
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+        `public, max-age=${60}`
+      )
     })
 
-    // TODO: handle the case when lastHead is not set
-    // TODO: handle unknown provider
+    it('returns error for an unknown provider', async () => {
+      await repository.setWalkerState('provider-id', {
+        status: 'walking',
+        tail: 'tail',
+        lastHead: 'last-head'
+      })
+      await repository.addPiecePayloadBlocks('provider-id', 'piece-cid', 'bafy1')
+
+      const res = await fetch(new URL('/ingestion-status/unknown-provider-id', baseUrl))
+      await assertResponseStatus(res, 200)
+      const body = await res.json()
+
+      assert.deepStrictEqual(body, {
+        providerId: 'unknown-provider-id',
+        ingestionStatus: 'Unknown provider ID'
+      })
+
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+        `public, max-age=${60}`
+      )
+    })
+
+    it('returns "head" as "lastHead" when the initial walk has not finished yet', async () => {
+      await repository.setWalkerState('provider-id', { status: 'walking', head: 'head' })
+      await repository.addPiecePayloadBlocks('provider-id', 'piece-cid', 'bafy1')
+
+      const res = await fetch(new URL('/ingestion-status/provider-id', baseUrl))
+      await assertResponseStatus(res, 200)
+      const body = await res.json()
+
+      assert.deepStrictEqual(body, {
+        providerId: 'provider-id',
+        ingestionStatus: 'walking',
+        lastHeadWalkedFrom: 'head',
+        piecesIndexed: 1
+      })
+
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+          `public, max-age=${60}`
+      )
+    })
   })
 })
