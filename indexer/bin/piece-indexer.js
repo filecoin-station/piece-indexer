@@ -1,3 +1,5 @@
+import '../lib/instrument.js'
+
 import assert from 'assert'
 import { RedisRepository } from '@filecoin-station/spark-piece-indexer-repository'
 import { Redis } from 'ioredis'
@@ -9,8 +11,6 @@ import { runIpniSync } from '../lib/ipni-watcher.js'
 const {
   REDIS_URL: redisUrl = 'redis://localhost:6379'
 } = process.env
-
-// TODO: setup Sentry
 
 const redisUrlParsed = new URL(redisUrl)
 const redis = new Redis({

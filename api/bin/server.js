@@ -1,3 +1,5 @@
+import '../lib/instrument.js'
+
 import http from 'node:http'
 import { once } from 'node:events'
 import { createHandler } from '../lib/handler.js'
@@ -11,8 +13,6 @@ const {
   REDIS_URL: redisUrl = 'redis://localhost:6379',
   REQUEST_LOGGING: requestLogging = 'true'
 } = process.env
-
-// TODO: setup Sentry
 
 const redisUrlParsed = new URL(redisUrl)
 const redis = new Redis({
