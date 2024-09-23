@@ -5,7 +5,21 @@ on:
   pull_request:
 
 jobs:
+  test-repository:
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_WORKSPACE: repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: supercharge/redis-github-action@1.8.0
+      - run: npm ci
+      - run: npm test
+
   test-indexer:
+    needs: [test-repository]
     runs-on: ubuntu-latest
     env:
       NPM_CONFIG_WORKSPACE: indexer
@@ -19,6 +33,7 @@ jobs:
       - run: npm test
 
   test-api:
+    needs: [test-repository]
     runs-on: ubuntu-latest
     env:
       NPM_CONFIG_WORKSPACE: api
