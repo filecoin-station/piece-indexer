@@ -11,7 +11,9 @@ FROM base AS build
 COPY --link package-lock.json package.json ./
 # We cannot use a wildcard until `COPY --parents` is stabilised
 # See https://docs.docker.com/reference/dockerfile/#copy---parents
+COPY --link api/package.json ./api/
 COPY --link indexer/package.json ./indexer/
+COPY --link repository/package.json ./repository/
 RUN npm ci --workspaces
 COPY --link . .
 

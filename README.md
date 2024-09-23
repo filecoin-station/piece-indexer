@@ -21,4 +21,5 @@ Indexer:
 
 ```bash
 $ fly deploy --remote-only -c indexer/fly.toml
+$ fly deploy --remote-only -c api/fly.toml
 ```
