@@ -278,12 +278,14 @@ async function fetchCid (providerBaseUrl, cid, { fetchTimeout } = {}) {
   debug('Fetching %s', url)
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(fetchTimeout ?? 30_000) })
+    debug('Response from %s → %s %o', url, res.status, res.headers)
     await assertOkResponse(res)
     return await res.json()
   } catch (err) {
     if (err && typeof err === 'object') {
       Object.assign(err, { url })
     }
+    debug('Error from %s -> %o', url, err)
     throw err
   }
 }
