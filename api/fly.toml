@@ -7,7 +7,7 @@ processes = []
 [env]
   PORT = "8080"
   HOST = "0.0.0.0"
-  DOMAIN = "spark-piece-indexer-api.fly.dev"
+  DOMAIN = "pix.filspark.com"
   SENTRY_ENVIRONMENT = "production"
   REQUEST_LOGGING = "false"
   NPM_CONFIG_WORKSPACE = "api"
