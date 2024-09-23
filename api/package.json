@@ -11,7 +11,7 @@
     "standard": "^17.1.2"
   },
   "dependencies": {
-    "@filecoin-stations/spark-piece-indexer-repository": "^1.0.0",
+    "@filecoin-station/spark-piece-indexer-repository": "^1.0.0",
     "http-responders": "^2.2.0",
     "ioredis": "^5.4.1"
   }
