@@ -1,6 +1,7 @@
 {
   "name": "@filecoin-station/spark-piece-indexer-repository",
   "type": "module",
+  "version": "1.0.0",
   "main": "lib/redis-repository.js",
   "private": true,
   "scripts": {
