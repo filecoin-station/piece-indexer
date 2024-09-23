@@ -1,4 +1,4 @@
-import { json, redirect } from 'http-responders'
+import { json, redirect, status } from 'http-responders'
 
 /** @import { URLSearchParams } from 'node:url' */
 /** @import {Repository, Logger} from './typings.d.ts' */
@@ -44,7 +44,7 @@ async function handleRequest (req, res, { repository, domain, logger }) {
   // const url = `/${segs.join('/')}`
 
   if (req.method !== 'GET') {
-    return notFound(res)
+    return status(res, 404)
   }
 
   if (segs[0] === 'sample' && segs[1] && segs[2]) {
@@ -52,7 +52,7 @@ async function handleRequest (req, res, { repository, domain, logger }) {
   } else if (segs[0] === 'ingestion-status' && segs[1]) {
     await getProviderIngestionStatus(req, res, repository, segs[1])
   } else {
-    notFound(res)
+    status(res, 404)
   }
 }
 
@@ -105,22 +105,14 @@ async function getProviderIngestionStatus (req, res, repository, providerId) {
   })
 }
 
-function notFound (res) {
-  res.statusCode = 404
-  res.end('Not Found')
-}
-
 function errorHandler (res, err, logger) {
   if (err instanceof SyntaxError) {
-    res.statusCode = 400
-    res.end('Invalid JSON Body')
+    status(res, 400, 'Invalid JSON Body')
   } else if (err.statusCode) {
-    res.statusCode = err.statusCode
-    res.end(err.message)
+    status(err.statusCode, err.message)
   } else {
     logger.error(err)
-    res.statusCode = 500
-    res.end('Internal Server Error')
+    status(res, 500, 'Internal Server Error')
   }
 
   // TBD: report internal errors to Sentry
