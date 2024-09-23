@@ -1,9 +1,9 @@
 {
-  "name": "@filecoin-station/spark-piece-indexer",
+  "name": "@filecoin-station/spark-piece-indexer-api",
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "node bin/piece-indexer.js",
+    "start": "node bin/server.js",
     "lint": "standard",
     "test": "node --test --test-reporter=spec"
   },
@@ -12,9 +12,7 @@
   },
   "dependencies": {
     "@filecoin-station/spark-piece-indexer-repository": "^1.0.0",
-    "@ipld/dag-cbor": "^9.2.1",
-    "debug": "^4.3.7",
-    "ioredis": "^5.4.1",
-    "multiformats": "^13.3.0"
+    "http-responders": "^2.2.0",
+    "ioredis": "^5.4.1"
   }
 }

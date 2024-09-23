@@ -1,3 +1,4 @@
+import { RedisRepository } from '@filecoin-station/spark-piece-indexer-repository'
 import { Redis } from 'ioredis'
 import assert from 'node:assert'
 import { once } from 'node:events'
@@ -9,7 +10,6 @@ import {
   processNextAdvertisement,
   walkOneStep
 } from '../lib/advertisement-walker.js'
-import { RedisRepository } from '../lib/redis-repository.js'
 import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
 
 /** @import { ProviderInfo, WalkerState } from '../lib/typings.js' */
