@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "node bin/api-server.js",
+    "start": "node bin/server.js",
     "lint": "standard",
     "test": "node --test --test-reporter=spec"
   },
