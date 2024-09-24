@@ -151,7 +151,7 @@ export async function processNextAdvertisement ({
   assert(state.tail)
 
   try {
-    const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(
+    const { previousAdvertisementCid, entriesFetchError, ...entry } = await fetchAdvertisedPayload(
       providerInfo.providerAddress,
       state.tail,
       { fetchTimeout }
@@ -169,7 +169,10 @@ export async function processNextAdvertisement ({
       state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
     }
 
-    const indexEntry = entry.pieceCid ? entry : undefined
+    if (entriesFetchError) {
+      state.entriesNotRetrievable = (state.entriesNotRetrievable ?? 0) + 1
+    }
+    const indexEntry = entry.pieceCid && entry.payloadCid ? entry : undefined
     const finished = !state.tail
     return {
       newState: state,
@@ -179,21 +182,26 @@ export async function processNextAdvertisement ({
   } catch (err) {
     let reason
     if (err instanceof Error) {
-      const url = 'url' in err ? err.url : undefined
+      const url = 'url' in err ? err.url : providerInfo.providerAddress
       if ('serverMessage' in err && err.serverMessage) {
         reason = err.serverMessage
+        if ('statusCode' in err && err.statusCode) {
+          reason = `${err.statusCode} ${reason}`
+        }
       } else if ('statusCode' in err && err.statusCode) {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.statusCode}`
+        reason = err.statusCode
       } else if (err.name === 'TimeoutError') {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} timed out`
+        reason = 'operation timed out'
       } else if (
         err.name === 'TypeError' &&
         err.message === 'fetch failed' &&
         err.cause &&
         err.cause instanceof Error
       ) {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.cause.message}`
+        reason = err.cause.message
       }
+
+      reason = `HTTP request to ${url} failed: ${reason}`
     }
 
     debug(
@@ -252,23 +260,43 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
     return { previousAdvertisementCid }
   }
 
-  const entriesChunk =
-    /** @type {{
-     Entries: { '/' :  { bytes: string } }[]
-    }} */(
-      await fetchCid(providerAddress, entriesCid, { fetchTimeout })
-    )
-  debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
-  const entryHash = entriesChunk.Entries[0]['/'].bytes
-  const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64'))).toString()
-
   const meta = parseMetadata(advertisement.Metadata['/'].bytes)
   const pieceCid = meta.deal?.PieceCID.toString()
 
-  return {
-    previousAdvertisementCid,
-    pieceCid,
-    payloadCid
+  try {
+    const entriesChunk =
+    /** @type {{
+     Entries: { '/' :  { bytes: string } }[]
+    }} */(
+        await fetchCid(providerAddress, entriesCid, { fetchTimeout })
+      )
+    debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
+    const entryHash = entriesChunk.Entries[0]['/'].bytes
+    const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64'))).toString()
+
+    return {
+      previousAdvertisementCid,
+      pieceCid,
+      payloadCid
+    }
+  } catch (err) {
+    if (err && typeof err === 'object' && 'statusCode' in err && err.statusCode === 404) {
+      // The index provider cannot find the advertised entries. We cannot do much about that,
+      // it's unlikely that further request will succeed. Let's skip this advertisement.
+      debug(
+        'Cannot fetch ad %s entries %s: %s %s',
+        advertisementCid,
+        entriesCid,
+        err.statusCode,
+        /** @type {any} */(err).serverMessage ?? '<not found>'
+      )
+      return {
+        entriesFetchError: true,
+        previousAdvertisementCid,
+        pieceCid
+      }
+    }
+    throw err
   }
 }
 
@@ -291,7 +319,7 @@ async function fetchCid (providerBaseUrl, cid, { fetchTimeout } = {}) {
     if (err && typeof err === 'object') {
       Object.assign(err, { url })
     }
-    debug('Error from %s -> %o', url, err)
+    debug('Error from %s ->', url, err)
     throw err
   }
 }

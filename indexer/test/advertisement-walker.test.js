@@ -1,8 +1,6 @@
 import { RedisRepository } from '@filecoin-station/spark-piece-indexer-repository'
 import { Redis } from 'ioredis'
 import assert from 'node:assert'
-import { once } from 'node:events'
-import http from 'node:http'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import {
@@ -10,7 +8,9 @@ import {
   processNextAdvertisement,
   walkOneStep
 } from '../lib/advertisement-walker.js'
+import { givenHttpServer } from './helpers/http-server.js'
 import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
+import { assertOkResponse } from '../lib/http-assertions.js'
 
 /** @import { ProviderInfo, WalkerState } from '../lib/typings.js' */
 
@@ -253,19 +253,15 @@ describe('processNextAdvertisement', () => {
   })
 
   it('handles timeout errors and explains the problem in the status', async () => {
-    const server = http.createServer(async (_req, res) => {
-      await setTimeout(500)
+    const { serverUrl } = await givenHttpServer(async (_req, res) => {
+      await setTimeout(100)
       res.statusCode = 501
       res.end()
     })
-    server.listen(0, '127.0.0.1')
-    server.unref()
-    await once(server, 'listening')
-    const serverPort = /** @type {import('node:net').AddressInfo} */(server.address()).port
 
     /** @type {ProviderInfo} */
     const providerInfo = {
-      providerAddress: `http://127.0.0.1:${serverPort}/`,
+      providerAddress: serverUrl,
       lastAdvertisementCID: 'baguqeeraTEST'
     }
 
@@ -282,7 +278,49 @@ describe('processNextAdvertisement', () => {
         head: 'baguqeeraTEST',
         tail: 'baguqeeraTEST',
         lastHead: undefined,
-        status: `Error processing baguqeeraTEST: HTTP request to http://127.0.0.1:${serverPort}/ipni/v1/ad/baguqeeraTEST timed out`
+        status: `Error processing baguqeeraTEST: HTTP request to ${serverUrl}ipni/v1/ad/baguqeeraTEST failed: operation timed out`
+      }
+    })
+  })
+
+  it('skips entries where the server responds with 404 cid not found', async () => {
+    const { serverUrl } = await givenHttpServer(async (req, res) => {
+      if (req.url === `/ipni/v1/ad/${FRISBII_AD_CID}`) {
+        const frisbeeRes = await fetch(FRISBII_ADDRESS + req.url)
+        await assertOkResponse(frisbeeRes)
+        // FIXME: can we pipe `frisbeeRes.body` directly to `res`?
+        // `frisbeeRes.body` is a Web API ReadableStream, `res` is a Node.js WritableStream
+        const body = await frisbeeRes.arrayBuffer()
+        res.write(new Uint8Array(body))
+        res.end()
+      } else {
+        res.statusCode = 404
+        res.write('cid not found')
+        res.end()
+      }
+    })
+
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: serverUrl,
+      lastAdvertisementCID: FRISBII_AD_CID
+    }
+
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined
+    })
+
+    assert.deepStrictEqual(result, {
+      finished: true,
+      indexEntry: undefined,
+      newState: {
+        entriesNotRetrievable: 1,
+        head: undefined,
+        tail: undefined,
+        lastHead: FRISBII_AD_CID,
+        status: `All advertisements from ${FRISBII_AD_CID} to the end of the chain were processed.`
       }
     })
   })
