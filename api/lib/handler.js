@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node'
 import { json, redirect, status } from 'http-responders'
 
 /** @import { URLSearchParams } from 'node:url' */
@@ -115,8 +116,7 @@ function errorHandler (res, err, logger) {
     status(res, 500, 'Internal Server Error')
   }
 
-  // TBD: report internal errors to Sentry
-  // if (res.statusCode >= 500) {
-  //   Sentry.captureException(err)
-  // }
+  if (res.statusCode >= 500) {
+    Sentry.captureException(err)
+  }
 }
