@@ -172,7 +172,7 @@ export async function processNextAdvertisement ({
     if (entriesFetchError) {
       state.entriesNotRetrievable = (state.entriesNotRetrievable ?? 0) + 1
     }
-    const indexEntry = entry.pieceCid && entry.payloadCid ? entry : undefined
+    const indexEntry = (entry.pieceCid && entry.payloadCid) ? entry : undefined
     const finished = !state.tail
     return {
       newState: state,
