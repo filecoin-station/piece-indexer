@@ -6,7 +6,11 @@ import http from 'node:http'
  */
 export async function givenHttpServer (handler) {
   const server = http.createServer((req, res) => {
-    handler(req, res).catch(err => {
+    // Wrap the handler() call in an async function block to ensure synchronously thrown errors
+    // are converted to rejected promises.
+    ;(async () => {
+      await handler(req, res)
+    })().catch(err => {
       console.log('Unhandled server error:', err)
       res.statusCode = 500
       res.write(err.message || err.toString())
