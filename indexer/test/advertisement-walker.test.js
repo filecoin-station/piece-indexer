@@ -11,6 +11,8 @@ import {
 import { givenHttpServer } from './helpers/http-server.js'
 import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
 import { assertOkResponse } from '../lib/http-assertions.js'
+import * as stream from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 
 /** @import { ProviderInfo, WalkerState } from '../lib/typings.js' */
 
@@ -286,13 +288,10 @@ describe('processNextAdvertisement', () => {
   it('skips entries where the server responds with 404 cid not found', async () => {
     const { serverUrl } = await givenHttpServer(async (req, res) => {
       if (req.url === `/ipni/v1/ad/${FRISBII_AD_CID}`) {
-        const frisbeeRes = await fetch(FRISBII_ADDRESS + req.url)
-        await assertOkResponse(frisbeeRes)
-        // FIXME: can we pipe `frisbeeRes.body` directly to `res`?
-        // `frisbeeRes.body` is a Web API ReadableStream, `res` is a Node.js WritableStream
-        const body = await frisbeeRes.arrayBuffer()
-        res.write(new Uint8Array(body))
-        res.end()
+        const frisbiiRes = await fetch(FRISBII_ADDRESS + req.url)
+        await assertOkResponse(frisbiiRes)
+        assert(frisbiiRes.body, 'frisbii response does not have any body')
+        await pipeline(stream.Readable.fromWeb(frisbiiRes.body), res)
       } else {
         res.statusCode = 404
         res.write('cid not found')
