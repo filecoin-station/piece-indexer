@@ -287,13 +287,15 @@ describe('processNextAdvertisement', () => {
     })
   })
 
-  it('skips entries where the server responds with 404 cid not found', async () => {
+  it('skips entries where the server responds with 404 cid not found and updates the counter', async () => {
+    const { adCid, previousAdCid } = knownAdvertisement
+
     const { serverUrl } = await givenHttpServer(async (req, res) => {
-      if (req.url === `/ipni/v1/ad/${FRISBII_AD_CID}`) {
-        const frisbiiRes = await fetch(FRISBII_ADDRESS + req.url)
-        await assertOkResponse(frisbiiRes)
-        assert(frisbiiRes.body, 'frisbii response does not have any body')
-        await pipeline(stream.Readable.fromWeb(frisbiiRes.body), res)
+      if (req.url === `/ipni/v1/ad/${adCid}`) {
+        const providerRes = await fetch(providerAddress + req.url)
+        await assertOkResponse(providerRes)
+        assert(providerRes.body, 'provider response does not have any body')
+        await pipeline(stream.Readable.fromWeb(providerRes.body), res)
       } else {
         res.statusCode = 404
         res.write('cid not found')
@@ -304,6 +306,32 @@ describe('processNextAdvertisement', () => {
     /** @type {ProviderInfo} */
     const providerInfo = {
       providerAddress: serverUrl,
+      lastAdvertisementCID: adCid
+    }
+
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined
+    })
+
+    assert.deepStrictEqual(result, {
+      finished: false,
+      indexEntry: undefined,
+      newState: {
+        entriesNotRetrievable: 1,
+        head: adCid,
+        tail: previousAdCid,
+        lastHead: undefined,
+        status: `Walking the advertisements from ${adCid}, next step: ${previousAdCid}`
+      }
+    })
+  })
+
+  it('skips entries when PieceCID is not in advertisement metadata and updates the counter', async () => {
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: FRISBII_ADDRESS,
       lastAdvertisementCID: FRISBII_AD_CID
     }
 
