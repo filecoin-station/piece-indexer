@@ -7,6 +7,7 @@ import * as multihash from 'multiformats/hashes/digest'
 import assert from 'node:assert'
 import timers from 'node:timers/promises'
 import { assertOkResponse } from './http-assertions.js'
+import pRetry from 'p-retry'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
 /** @import { RedisRepository as Repository } from '@filecoin-station/spark-piece-indexer-repository' */
@@ -151,7 +152,7 @@ export async function processNextAdvertisement ({
   assert(state.tail)
 
   try {
-    const { previousAdvertisementCid, entriesFetchError, ...entry } = await fetchAdvertisedPayload(
+    const { previousAdvertisementCid, entry, error } = await fetchAdvertisedPayload(
       providerInfo.providerAddress,
       state.tail,
       { fetchTimeout }
@@ -169,10 +170,13 @@ export async function processNextAdvertisement ({
       state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
     }
 
-    if (entriesFetchError) {
+    if (error === 'CANNOT_FETCH_ENTRIES') {
       state.entriesNotRetrievable = (state.entriesNotRetrievable ?? 0) + 1
+    } else if (error === 'CANNOT_DETERMINE_PIECE_CID') {
+      state.adsMissingPieceCID = (state.adsMissingPieceCID ?? 0) + 1
     }
-    const indexEntry = (entry.pieceCid && entry.payloadCid) ? entry : undefined
+
+    const indexEntry = entry?.pieceCid ? entry : undefined
     const finished = !state.tail
     return {
       newState: state,
@@ -180,38 +184,16 @@ export async function processNextAdvertisement ({
       finished
     }
   } catch (err) {
-    let reason
-    if (err instanceof Error) {
-      const url = 'url' in err ? err.url : providerInfo.providerAddress
-      if ('serverMessage' in err && err.serverMessage) {
-        reason = err.serverMessage
-        if ('statusCode' in err && err.statusCode) {
-          reason = `${err.statusCode} ${reason}`
-        }
-      } else if ('statusCode' in err && err.statusCode) {
-        reason = err.statusCode
-      } else if (err.name === 'TimeoutError') {
-        reason = 'operation timed out'
-      } else if (
-        err.name === 'TypeError' &&
-        err.message === 'fetch failed' &&
-        err.cause &&
-        err.cause instanceof Error
-      ) {
-        reason = err.cause.message
-      }
-
-      reason = `HTTP request to ${url} failed: ${reason}`
-    }
+    const errorDescription = describeFetchError(err, providerInfo.providerAddress)
 
     debug(
       'Cannot process provider %s (%s) advertisement %s: %s',
       providerId,
       providerInfo.providerAddress,
       state.tail,
-      reason ?? err
+      errorDescription ?? err
     )
-    state.status = `Error processing ${state.tail}: ${reason ?? 'internal error'}`
+    state.status = `Error processing ${state.tail}: ${errorDescription ?? 'internal error'}`
     return {
       newState: state,
       failed: true
@@ -219,10 +201,37 @@ export async function processNextAdvertisement ({
   }
 }
 
-/** @typedef {{
-    pieceCid: string | undefined;
-    payloadCid: string;
-}} AdvertisedPayload */
+/**
+ * @param {unknown} err
+ * @param {string} providerAddress
+ */
+function describeFetchError (err, providerAddress) {
+  if (!(err instanceof Error)) return undefined
+
+  let reason
+  if ('serverMessage' in err && err.serverMessage) {
+    reason = err.serverMessage
+    if ('statusCode' in err && err.statusCode) {
+      reason = `${err.statusCode} ${reason}`
+    }
+  } else if ('statusCode' in err && err.statusCode) {
+    reason = err.statusCode
+  } else if (err.name === 'TimeoutError') {
+    reason = 'operation timed out'
+  } else if (
+    err.name === 'TypeError' &&
+      err.message === 'fetch failed' &&
+      err.cause &&
+      err.cause instanceof Error
+  ) {
+    reason = err.cause.message
+  }
+  if (!reason) return undefined
+
+  const url = 'url' in err ? err.url : providerAddress
+  reason = `HTTP request to ${url} failed: ${reason}`
+  return reason
+}
 
 /**
  * @param {string} providerAddress
@@ -262,41 +271,51 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
 
   const meta = parseMetadata(advertisement.Metadata['/'].bytes)
   const pieceCid = meta.deal?.PieceCID.toString()
-
-  try {
-    const entriesChunk =
-    /** @type {{
-     Entries: { '/' :  { bytes: string } }[]
-    }} */(
-        await fetchCid(providerAddress, entriesCid, { fetchTimeout })
-      )
-    debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
-    const entryHash = entriesChunk.Entries[0]['/'].bytes
-    const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64'))).toString()
-
+  if (!pieceCid) {
+    debug('advertisement %s has no PieceCID in metadata: %j', advertisementCid, meta.deal)
     return {
-      previousAdvertisementCid,
-      pieceCid,
-      payloadCid
+      error: /** @type {const} */('CANNOT_DETERMINE_PIECE_CID'),
+      previousAdvertisementCid
     }
-  } catch (err) {
-    if (err && typeof err === 'object' && 'statusCode' in err && err.statusCode === 404) {
-      // The index provider cannot find the advertised entries. We cannot do much about that,
-      // it's unlikely that further request will succeed. Let's skip this advertisement.
-      debug(
-        'Cannot fetch ad %s entries %s: %s %s',
-        advertisementCid,
-        entriesCid,
-        err.statusCode,
-        /** @type {any} */(err).serverMessage ?? '<not found>'
-      )
-      return {
-        entriesFetchError: true,
-        previousAdvertisementCid,
-        pieceCid
+  }
+
+  let entriesChunk
+  try {
+    entriesChunk = await pRetry(
+      async () =>
+        /** @type {{
+       Entries: { '/' :  { bytes: string } }[]
+      }} */(
+          await fetchCid(providerAddress, entriesCid, { fetchTimeout })
+        ),
+      {
+        shouldRetry: (err) =>
+          err && 'statusCode' in err && typeof err.statusCode === 'number' && err.statusCode >= 500
       }
+    )
+  } catch (err) {
+    // We are not able to fetch the advertised entries. Skip this advertisement so that we can
+    // continue the ingestion of other advertisements.
+    const errorDescription = describeFetchError(err, providerAddress)
+    console.warn(
+      'Cannot fetch ad %s entries %s: %s',
+      advertisementCid,
+      entriesCid,
+      errorDescription ?? err
+    )
+    return {
+      error: /** @type {const} */('CANNOT_FETCH_ENTRIES'),
+      previousAdvertisementCid
     }
-    throw err
+  }
+
+  debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
+  const entryHash = entriesChunk.Entries[0]['/'].bytes
+  const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64'))).toString()
+
+  return {
+    previousAdvertisementCid,
+    entry: { pieceCid, payloadCid }
   }
 }
 

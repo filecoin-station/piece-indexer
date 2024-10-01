@@ -173,6 +173,7 @@ describe('processNextAdvertisement', () => {
       head: undefined, // we finished the walk, there is no head
       tail: undefined, // we finished the walk, there is no next step
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
+      adsMissingPieceCID: 1,
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
 
@@ -199,6 +200,7 @@ describe('processNextAdvertisement', () => {
       head: undefined, // we finished the walk, there is no head
       tail: undefined, // we finished the walk, there is no next step
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
+      adsMissingPieceCID: 1,
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
 
@@ -315,7 +317,7 @@ describe('processNextAdvertisement', () => {
       finished: true,
       indexEntry: undefined,
       newState: {
-        entriesNotRetrievable: 1,
+        adsMissingPieceCID: 1,
         head: undefined,
         tail: undefined,
         lastHead: FRISBII_AD_CID,
@@ -331,17 +333,18 @@ describe('fetchAdvertisedPayload', () => {
   it('returns previousAdvertisementCid, pieceCid and payloadCid for Graphsync retrievals', async () => {
     const result = await fetchAdvertisedPayload(providerAddress, knownAdvertisement.adCid)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      payloadCid: knownAdvertisement.payloadCid,
-      pieceCid: knownAdvertisement.pieceCid,
+      entry: {
+        payloadCid: knownAdvertisement.payloadCid,
+        pieceCid: knownAdvertisement.pieceCid
+      },
       previousAdvertisementCid: knownAdvertisement.previousAdCid
     }))
   })
 
-  it('returns undefined pieceCid for HTTP retrievals', async () => {
+  it('returns CANNOT_DETERMINE_PIECE_CID error for HTTP retrievals', async () => {
     const result = await fetchAdvertisedPayload(FRISBII_ADDRESS, FRISBII_AD_CID)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      payloadCid: 'bafkreih5zasorm4tlfga4ztwvm2dlnw6jxwwuvgnokyt3mjamfn3svvpyy',
-      pieceCid: undefined,
+      error: 'CANNOT_DETERMINE_PIECE_CID',
       // Our Frisbii instance announced only one advertisement
       // That's unrelated to HTTP vs Graphsync retrievals
       previousAdvertisementCid: undefined
@@ -452,6 +455,8 @@ describe('data schema for REST API', () => {
       // Is it a problem if our observability API does not tell the provider address?
       ingestionStatus: walkerState.status,
       lastHeadWalkedFrom: walkerState.lastHead ?? walkerState.head,
+      adsMissingPieceCID: walkerState.adsMissingPieceCID ?? 0,
+      entriesNotRetrievable: walkerState.entriesNotRetrievable ?? 0,
       piecesIndexed: await repository.countPiecesIndexed(providerId)
     }
 
@@ -459,6 +464,8 @@ describe('data schema for REST API', () => {
       providerId,
       ingestionStatus: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`,
       lastHeadWalkedFrom: knownAdvertisement.adCid,
+      adsMissingPieceCID: 0,
+      entriesNotRetrievable: 0,
       piecesIndexed: 1
     })
   })
