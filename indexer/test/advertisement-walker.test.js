@@ -369,10 +369,10 @@ describe('fetchAdvertisedPayload', () => {
     }))
   })
 
-  it('returns CANNOT_DETERMINE_PIECE_CID error for HTTP retrievals', async () => {
+  it('returns MISSING_PIECE_CID error for HTTP retrievals', async () => {
     const result = await fetchAdvertisedPayload(FRISBII_ADDRESS, FRISBII_AD_CID)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      error: 'CANNOT_DETERMINE_PIECE_CID',
+      error: 'MISSING_PIECE_CID',
       // Our Frisbii instance announced only one advertisement
       // That's unrelated to HTTP vs Graphsync retrievals
       previousAdvertisementCid: undefined

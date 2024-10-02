@@ -170,9 +170,9 @@ export async function processNextAdvertisement ({
       state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
     }
 
-    if (error === 'CANNOT_FETCH_ENTRIES') {
+    if (error === 'ENTRIES_NOT_RETRIEVABLE') {
       state.entriesNotRetrievable = (state.entriesNotRetrievable ?? 0) + 1
-    } else if (error === 'CANNOT_DETERMINE_PIECE_CID') {
+    } else if (error === 'MISSING_PIECE_CID') {
       state.adsMissingPieceCID = (state.adsMissingPieceCID ?? 0) + 1
     }
 
@@ -274,7 +274,7 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
   if (!pieceCid) {
     debug('advertisement %s has no PieceCID in metadata: %j', advertisementCid, meta.deal)
     return {
-      error: /** @type {const} */('CANNOT_DETERMINE_PIECE_CID'),
+      error: /** @type {const} */('MISSING_PIECE_CID'),
       previousAdvertisementCid
     }
   }
@@ -304,7 +304,7 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
       errorDescription ?? err
     )
     return {
-      error: /** @type {const} */('CANNOT_FETCH_ENTRIES'),
+      error: /** @type {const} */('ENTRIES_NOT_RETRIEVABLE'),
       previousAdvertisementCid
     }
   }
