@@ -298,7 +298,8 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
     // We are not able to fetch the advertised entries. Skip this advertisement so that we can
     // continue the ingestion of other advertisements.
     const errorDescription = describeFetchError(err, providerAddress)
-    console.warn(
+    const log = /** @type {any} */(err)?.statusCode === 404 ? debug : console.warn
+    log(
       'Cannot fetch ad %s entries %s: %s',
       advertisementCid,
       entriesCid,
