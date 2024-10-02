@@ -204,6 +204,7 @@ export async function processNextAdvertisement ({
 /**
  * @param {unknown} err
  * @param {string} providerAddress
+ * @returns {string | undefined}
  */
 function describeFetchError (err, providerAddress) {
   if (!(err instanceof Error)) return undefined
