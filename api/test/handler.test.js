@@ -123,6 +123,8 @@ describe('HTTP request handler', () => {
         // providerAddress: "state.providerAddress",
         ingestionStatus: 'walking',
         lastHeadWalkedFrom: 'last-head',
+        adsMissingPieceCID: 0,
+        entriesNotRetrievable: 0,
         piecesIndexed: 1
       })
 
@@ -167,7 +169,36 @@ describe('HTTP request handler', () => {
         providerId: 'provider-id',
         ingestionStatus: 'walking',
         lastHeadWalkedFrom: 'head',
+        adsMissingPieceCID: 0,
+        entriesNotRetrievable: 0,
         piecesIndexed: 1
+      })
+
+      assert.strictEqual(
+        res.headers.get('cache-control'),
+          `public, max-age=${60}`
+      )
+    })
+
+    it('returns the number of adsMissingPieceCID and entriesNotRetrievable', async () => {
+      await repository.setWalkerState('provider-id', {
+        status: 'walking',
+        head: 'head',
+        entriesNotRetrievable: 10,
+        adsMissingPieceCID: 20
+      })
+
+      const res = await fetch(new URL('/ingestion-status/provider-id', baseUrl))
+      await assertResponseStatus(res, 200)
+      const body = await res.json()
+
+      assert.deepStrictEqual(body, {
+        providerId: 'provider-id',
+        ingestionStatus: 'walking',
+        lastHeadWalkedFrom: 'head',
+        entriesNotRetrievable: 10,
+        adsMissingPieceCID: 20,
+        piecesIndexed: 0
       })
 
       assert.strictEqual(
