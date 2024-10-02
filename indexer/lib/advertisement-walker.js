@@ -282,11 +282,11 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
   let entriesChunk
   try {
     entriesChunk = await pRetry(
-      async () =>
-        /** @type {{
-       Entries: { '/' :  { bytes: string } }[]
-      }} */(
-          await fetchCid(providerAddress, entriesCid, { fetchTimeout })
+      () =>
+        /** @type {Promise<{
+          Entries: { '/' :  { bytes: string } }[]
+        }>} */(
+          fetchCid(providerAddress, entriesCid, { fetchTimeout })
         ),
       {
         shouldRetry: (err) =>
