@@ -1,8 +1,6 @@
 import { RedisRepository } from '@filecoin-station/spark-piece-indexer-repository'
 import { Redis } from 'ioredis'
 import assert from 'node:assert'
-import { once } from 'node:events'
-import http from 'node:http'
 import { after, before, beforeEach, describe, it } from 'node:test'
 import { setTimeout } from 'node:timers/promises'
 import {
@@ -10,7 +8,11 @@ import {
   processNextAdvertisement,
   walkOneStep
 } from '../lib/advertisement-walker.js'
+import { givenHttpServer } from './helpers/http-server.js'
 import { FRISBII_ADDRESS, FRISBII_AD_CID } from './helpers/test-data.js'
+import { assertOkResponse } from '../lib/http-assertions.js'
+import * as stream from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 
 /** @import { ProviderInfo, WalkerState } from '../lib/typings.js' */
 
@@ -171,6 +173,7 @@ describe('processNextAdvertisement', () => {
       head: undefined, // we finished the walk, there is no head
       tail: undefined, // we finished the walk, there is no next step
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
+      adsMissingPieceCID: 1,
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
 
@@ -197,6 +200,7 @@ describe('processNextAdvertisement', () => {
       head: undefined, // we finished the walk, there is no head
       tail: undefined, // we finished the walk, there is no next step
       lastHead: FRISBII_AD_CID, // lastHead was updated to head of the walk we finished
+      adsMissingPieceCID: 1,
       status: `All advertisements from ${newState?.lastHead} to the end of the chain were processed.`
     }))
 
@@ -253,19 +257,15 @@ describe('processNextAdvertisement', () => {
   })
 
   it('handles timeout errors and explains the problem in the status', async () => {
-    const server = http.createServer(async (_req, res) => {
-      await setTimeout(500)
+    const { serverUrl } = await givenHttpServer(async (_req, res) => {
+      await setTimeout(100)
       res.statusCode = 501
       res.end()
     })
-    server.listen(0, '127.0.0.1')
-    server.unref()
-    await once(server, 'listening')
-    const serverPort = /** @type {import('node:net').AddressInfo} */(server.address()).port
 
     /** @type {ProviderInfo} */
     const providerInfo = {
-      providerAddress: `http://127.0.0.1:${serverPort}/`,
+      providerAddress: serverUrl,
       lastAdvertisementCID: 'baguqeeraTEST'
     }
 
@@ -282,7 +282,74 @@ describe('processNextAdvertisement', () => {
         head: 'baguqeeraTEST',
         tail: 'baguqeeraTEST',
         lastHead: undefined,
-        status: `Error processing baguqeeraTEST: HTTP request to http://127.0.0.1:${serverPort}/ipni/v1/ad/baguqeeraTEST timed out`
+        status: `Error processing baguqeeraTEST: HTTP request to ${serverUrl}ipni/v1/ad/baguqeeraTEST failed: operation timed out`
+      }
+    })
+  })
+
+  it('skips entries where the server responds with 404 cid not found and updates the counter', async () => {
+    const { adCid, previousAdCid } = knownAdvertisement
+
+    const { serverUrl } = await givenHttpServer(async (req, res) => {
+      if (req.url === `/ipni/v1/ad/${adCid}`) {
+        const providerRes = await fetch(providerAddress + req.url)
+        await assertOkResponse(providerRes)
+        assert(providerRes.body, 'provider response does not have any body')
+        await pipeline(stream.Readable.fromWeb(providerRes.body), res)
+      } else {
+        res.statusCode = 404
+        res.write('cid not found')
+        res.end()
+      }
+    })
+
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: serverUrl,
+      lastAdvertisementCID: adCid
+    }
+
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined
+    })
+
+    assert.deepStrictEqual(result, {
+      finished: false,
+      indexEntry: undefined,
+      newState: {
+        entriesNotRetrievable: 1,
+        head: adCid,
+        tail: previousAdCid,
+        lastHead: undefined,
+        status: `Walking the advertisements from ${adCid}, next step: ${previousAdCid}`
+      }
+    })
+  })
+
+  it('skips entries when PieceCID is not in advertisement metadata and updates the counter', async () => {
+    /** @type {ProviderInfo} */
+    const providerInfo = {
+      providerAddress: FRISBII_ADDRESS,
+      lastAdvertisementCID: FRISBII_AD_CID
+    }
+
+    const result = await processNextAdvertisement({
+      providerId,
+      providerInfo,
+      walkerState: undefined
+    })
+
+    assert.deepStrictEqual(result, {
+      finished: true,
+      indexEntry: undefined,
+      newState: {
+        adsMissingPieceCID: 1,
+        head: undefined,
+        tail: undefined,
+        lastHead: FRISBII_AD_CID,
+        status: `All advertisements from ${FRISBII_AD_CID} to the end of the chain were processed.`
       }
     })
   })
@@ -294,17 +361,18 @@ describe('fetchAdvertisedPayload', () => {
   it('returns previousAdvertisementCid, pieceCid and payloadCid for Graphsync retrievals', async () => {
     const result = await fetchAdvertisedPayload(providerAddress, knownAdvertisement.adCid)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      payloadCid: knownAdvertisement.payloadCid,
-      pieceCid: knownAdvertisement.pieceCid,
+      entry: {
+        payloadCid: knownAdvertisement.payloadCid,
+        pieceCid: knownAdvertisement.pieceCid
+      },
       previousAdvertisementCid: knownAdvertisement.previousAdCid
     }))
   })
 
-  it('returns undefined pieceCid for HTTP retrievals', async () => {
+  it('returns MISSING_PIECE_CID error for HTTP retrievals', async () => {
     const result = await fetchAdvertisedPayload(FRISBII_ADDRESS, FRISBII_AD_CID)
     assert.deepStrictEqual(result, /** @type {AdvertisedPayload} */({
-      payloadCid: 'bafkreih5zasorm4tlfga4ztwvm2dlnw6jxwwuvgnokyt3mjamfn3svvpyy',
-      pieceCid: undefined,
+      error: 'MISSING_PIECE_CID',
       // Our Frisbii instance announced only one advertisement
       // That's unrelated to HTTP vs Graphsync retrievals
       previousAdvertisementCid: undefined
@@ -415,6 +483,8 @@ describe('data schema for REST API', () => {
       // Is it a problem if our observability API does not tell the provider address?
       ingestionStatus: walkerState.status,
       lastHeadWalkedFrom: walkerState.lastHead ?? walkerState.head,
+      adsMissingPieceCID: walkerState.adsMissingPieceCID ?? 0,
+      entriesNotRetrievable: walkerState.entriesNotRetrievable ?? 0,
       piecesIndexed: await repository.countPiecesIndexed(providerId)
     }
 
@@ -422,6 +492,8 @@ describe('data schema for REST API', () => {
       providerId,
       ingestionStatus: `Walking the advertisements from ${knownAdvertisement.adCid}, next step: ${knownAdvertisement.previousAdCid}`,
       lastHeadWalkedFrom: knownAdvertisement.adCid,
+      adsMissingPieceCID: 0,
+      entriesNotRetrievable: 0,
       piecesIndexed: 1
     })
   })

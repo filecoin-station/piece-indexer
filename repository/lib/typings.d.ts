@@ -30,6 +30,8 @@ export interface WalkerState {
   tail?: string;
   lastHead?: string;
   status: string;
+  entriesNotRetrievable?: number;
+  adsMissingPieceCID?: number;
 }
 
 export type ProviderToWalkerStateMap = Map<string, WalkerState>

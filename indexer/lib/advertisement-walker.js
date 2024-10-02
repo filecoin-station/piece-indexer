@@ -7,6 +7,7 @@ import * as multihash from 'multiformats/hashes/digest'
 import assert from 'node:assert'
 import timers from 'node:timers/promises'
 import { assertOkResponse } from './http-assertions.js'
+import pRetry from 'p-retry'
 
 /** @import { ProviderInfo, WalkerState } from './typings.js' */
 /** @import { RedisRepository as Repository } from '@filecoin-station/spark-piece-indexer-repository' */
@@ -151,7 +152,7 @@ export async function processNextAdvertisement ({
   assert(state.tail)
 
   try {
-    const { previousAdvertisementCid, ...entry } = await fetchAdvertisedPayload(
+    const { previousAdvertisementCid, entry, error } = await fetchAdvertisedPayload(
       providerInfo.providerAddress,
       state.tail,
       { fetchTimeout }
@@ -169,7 +170,13 @@ export async function processNextAdvertisement ({
       state.status = `Walking the advertisements from ${state.head}, next step: ${state.tail}`
     }
 
-    const indexEntry = entry.pieceCid ? entry : undefined
+    if (error === 'ENTRIES_NOT_RETRIEVABLE') {
+      state.entriesNotRetrievable = (state.entriesNotRetrievable ?? 0) + 1
+    } else if (error === 'MISSING_PIECE_CID') {
+      state.adsMissingPieceCID = (state.adsMissingPieceCID ?? 0) + 1
+    }
+
+    const indexEntry = entry?.pieceCid ? entry : undefined
     const finished = !state.tail
     return {
       newState: state,
@@ -177,33 +184,16 @@ export async function processNextAdvertisement ({
       finished
     }
   } catch (err) {
-    let reason
-    if (err instanceof Error) {
-      const url = 'url' in err ? err.url : undefined
-      if ('serverMessage' in err && err.serverMessage) {
-        reason = err.serverMessage
-      } else if ('statusCode' in err && err.statusCode) {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.statusCode}`
-      } else if (err.name === 'TimeoutError') {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} timed out`
-      } else if (
-        err.name === 'TypeError' &&
-        err.message === 'fetch failed' &&
-        err.cause &&
-        err.cause instanceof Error
-      ) {
-        reason = `HTTP request to ${url ?? providerInfo.providerAddress} failed: ${err.cause.message}`
-      }
-    }
+    const errorDescription = describeFetchError(err, providerInfo.providerAddress)
 
     debug(
       'Cannot process provider %s (%s) advertisement %s: %s',
       providerId,
       providerInfo.providerAddress,
       state.tail,
-      reason ?? err
+      errorDescription ?? err
     )
-    state.status = `Error processing ${state.tail}: ${reason ?? 'internal error'}`
+    state.status = `Error processing ${state.tail}: ${errorDescription ?? 'internal error'}`
     return {
       newState: state,
       failed: true
@@ -211,10 +201,38 @@ export async function processNextAdvertisement ({
   }
 }
 
-/** @typedef {{
-    pieceCid: string | undefined;
-    payloadCid: string;
-}} AdvertisedPayload */
+/**
+ * @param {unknown} err
+ * @param {string} providerAddress
+ * @returns {string | undefined}
+ */
+function describeFetchError (err, providerAddress) {
+  if (!(err instanceof Error)) return undefined
+
+  let reason
+  if ('serverMessage' in err && err.serverMessage) {
+    reason = err.serverMessage
+    if ('statusCode' in err && err.statusCode) {
+      reason = `${err.statusCode} ${reason}`
+    }
+  } else if ('statusCode' in err && err.statusCode) {
+    reason = err.statusCode
+  } else if (err.name === 'TimeoutError') {
+    reason = 'operation timed out'
+  } else if (
+    err.name === 'TypeError' &&
+      err.message === 'fetch failed' &&
+      err.cause &&
+      err.cause instanceof Error
+  ) {
+    reason = err.cause.message
+  }
+  if (!reason) return undefined
+
+  const url = 'url' in err ? err.url : providerAddress
+  reason = `HTTP request to ${url} failed: ${reason}`
+  return reason
+}
 
 /**
  * @param {string} providerAddress
@@ -252,23 +270,53 @@ export async function fetchAdvertisedPayload (providerAddress, advertisementCid,
     return { previousAdvertisementCid }
   }
 
-  const entriesChunk =
-    /** @type {{
-     Entries: { '/' :  { bytes: string } }[]
-    }} */(
-      await fetchCid(providerAddress, entriesCid, { fetchTimeout })
+  const meta = parseMetadata(advertisement.Metadata['/'].bytes)
+  const pieceCid = meta.deal?.PieceCID.toString()
+  if (!pieceCid) {
+    debug('advertisement %s has no PieceCID in metadata: %j', advertisementCid, meta.deal)
+    return {
+      error: /** @type {const} */('MISSING_PIECE_CID'),
+      previousAdvertisementCid
+    }
+  }
+
+  let entriesChunk
+  try {
+    entriesChunk = await pRetry(
+      () =>
+        /** @type {Promise<{
+          Entries: { '/' :  { bytes: string } }[]
+        }>} */(
+          fetchCid(providerAddress, entriesCid, { fetchTimeout })
+        ),
+      {
+        shouldRetry: (err) =>
+          err && 'statusCode' in err && typeof err.statusCode === 'number' && err.statusCode >= 500
+      }
     )
+  } catch (err) {
+    // We are not able to fetch the advertised entries. Skip this advertisement so that we can
+    // continue the ingestion of other advertisements.
+    const errorDescription = describeFetchError(err, providerAddress)
+    console.warn(
+      'Cannot fetch ad %s entries %s: %s',
+      advertisementCid,
+      entriesCid,
+      errorDescription ?? err
+    )
+    return {
+      error: /** @type {const} */('ENTRIES_NOT_RETRIEVABLE'),
+      previousAdvertisementCid
+    }
+  }
+
   debug('entriesChunk %s %j', entriesCid, entriesChunk.Entries.slice(0, 5))
   const entryHash = entriesChunk.Entries[0]['/'].bytes
   const payloadCid = CID.create(1, 0x55 /* raw */, multihash.decode(Buffer.from(entryHash, 'base64'))).toString()
 
-  const meta = parseMetadata(advertisement.Metadata['/'].bytes)
-  const pieceCid = meta.deal?.PieceCID.toString()
-
   return {
     previousAdvertisementCid,
-    pieceCid,
-    payloadCid
+    entry: { pieceCid, payloadCid }
   }
 }
 
@@ -291,7 +339,7 @@ async function fetchCid (providerBaseUrl, cid, { fetchTimeout } = {}) {
     if (err && typeof err === 'object') {
       Object.assign(err, { url })
     }
-    debug('Error from %s -> %o', url, err)
+    debug('Error from %s ->', url, err)
     throw err
   }
 }
