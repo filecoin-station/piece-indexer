@@ -11,7 +11,7 @@ https://github.com/filecoin-station/piece-indexer/issues/33
 
 ## `GET /sample/{provider-id}/{piece-cid}
 
-Sample a set of multihashes ingested by IPNI for a given ContextID.
+Sample a set of multihashes ingested by IPNI for a given ContextID, matching the route eventually to be exposed by an IPNI reverse index.
 
 _This is an alternative implementation of the IPNI Reverse Index as specified in
 [xedni/openapi.yaml](https://github.com/ipni/xedni/blob/526f90f5a6001cb50b52e6376f8877163f8018af/openapi.yaml)._
