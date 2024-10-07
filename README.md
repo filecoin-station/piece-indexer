@@ -11,6 +11,22 @@ https://github.com/filecoin-station/piece-indexer/issues/33
 
 ## `GET /sample/{provider-id}/{piece-cid}
 
+Sample a set of multihashes ingested by IPNI for a given ContextID.
+
+_This is an alternative implementation of the IPNI Reverse Index as specified in
+[xedni/openapi.yaml](https://github.com/ipni/xedni/blob/526f90f5a6001cb50b52e6376f8877163f8018af/openapi.yaml)._
+
+Parameters:
+
+- `provider-id` - the peer ID of the storage provider (index publisher)
+- `piece-cid` - the Filecoin deal's PieceCID as advertised by the provider in
+  Graphsync retrieval metadata
+
+Response:
+
+- `samples` - a list of exactly one payload block CID contained inside the piece
+  identified by the requested PieceCID.
+
 Example:
 
 https://pix.filspark.com/sample/12D3KooWHKeaNCnYByQUMS2n5PAZ1KZ9xKXqsb4bhpxVJ6bBJg5V/baga6ea4seaqlwzed5tgjtyhrugjziutzthx2wrympvsuqhfngwdwqzvosuchmja
@@ -22,6 +38,8 @@ https://pix.filspark.com/sample/12D3KooWHKeaNCnYByQUMS2n5PAZ1KZ9xKXqsb4bhpxVJ6bB
 ```
 
 ## `GET /ingestion-status/{provider-id}`
+
+Return the index status for the given provider.
 
 Example:
 
