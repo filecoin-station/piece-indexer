@@ -9,7 +9,7 @@ A lightweight IPNI node mapping Filecoin PieceCID → payload block CID.
 Note: this will change soon, see
 https://github.com/filecoin-station/piece-indexer/issues/33
 
-## `GET /sample/{provider-id}/{piece-cid}
+## `GET /sample/{provider-id}/{piece-cid}`
 
 Sample a set of multihashes ingested by IPNI for a given ContextID, matching the
 route eventually to be exposed by an IPNI reverse index.
