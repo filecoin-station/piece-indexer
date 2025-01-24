@@ -5,7 +5,7 @@ import Fastify from 'fastify'
  * @param {object} args
  * @param {Repository} args.repository
  * @param {string|boolean} args.domain
- * @param {boolean} args.logger
+ * @param {Fastify.FastifyLoggerOptions} args.logger
  */
 export function createApp ({ repository, domain, logger }) {
   const app = Fastify({ logger })

@@ -28,7 +28,10 @@ const repository = new RedisRepository(redis)
 const app = createApp({
   repository,
   domain,
-  logger: ['1', 'true'].includes(requestLogging) ? console.info : () => {}
+  logger: {
+    level: ['1', 'true'].includes(requestLogging) ? 'info' : 'error'
+  }
 })
 console.log('Starting the http server on host %j port %s', HOST, PORT)
-console.log(await app.listen({ host: HOST, port: Number(PORT) }))
+const baseUrl = await app.listen({ host: HOST, port: Number(PORT) })
+console.log(baseUrl)
